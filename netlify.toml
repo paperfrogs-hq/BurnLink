@@ -9,13 +9,13 @@
 
 [[redirects]]
   from = "https://sharefile0x1.netlify.app/*"
-  to = "http://burnlink.page/:splat"
+  to = "https://burnlink.page/:splat"
   status = 301
   force = true
 
 [[redirects]]
   from = "http://sharefile0x1.netlify.app/*"
-  to = "http://burnlink.page/:splat"
+  to = "https://burnlink.page/:splat"
   status = 301
   force = true
 

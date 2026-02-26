@@ -10,7 +10,7 @@ const supabase = require("./lib/supabase");
 
 const app = express();
 const storageBucket = process.env.SUPABASE_STORAGE_BUCKET || "files";
-const canonicalBaseUrl = process.env.CANONICAL_BASE_URL || "http://burnlink.page";
+const canonicalBaseUrl = process.env.CANONICAL_BASE_URL || "https://burnlink.page";
 const configuredMaxUploadBytes = Number(process.env.MAX_UPLOAD_BYTES || 0);
 const hasAppUploadLimit =
   Number.isFinite(configuredMaxUploadBytes) && configuredMaxUploadBytes > 0;
