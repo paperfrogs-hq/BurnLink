@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>File Sharing Server</title>
+    <style>
+      body {
+        font-family: Segoe UI, Arial, sans-serif;
+        background: #f2f4f7;
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+      .card {
+        width: min(560px, 92vw);
+        background: #fff;
+        border-radius: 10px;
+        padding: 1.25rem;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        margin-top: 0;
+      }
+      form {
+        display: grid;
+        gap: 0.75rem;
+      }
+      input,
+      button {
+        font-size: 1rem;
+        padding: 0.6rem;
+      }
+      button {
+        cursor: pointer;
+      }
+      .error {
+        color: #b42318;
+      }
+      .link-box {
+        margin-top: 1rem;
+        padding: 0.75rem;
+        border: 1px solid #d0d5dd;
+        border-radius: 8px;
+        word-break: break-all;
+      }
+    </style>
+</head>
+<body>
+    <main class="card">
+      <h1>Share a file</h1>
+      <p>Upload a file. Add a password for encryption. Link works only once.</p>
+
+      <% if (error) { %>
+        <p class="error"><%= error %></p>
+      <% } %>
+
+      <form action="/upload" method="post" enctype="multipart/form-data">
+        <label for="file">File</label>
+        <input type="file" id="file" name="file" required />
+
+        <label for="password">Password (optional)</label>
+        <input type="password" id="password" name="password" />
+
+        <button type="submit">Upload</button>
+      </form>
+
+      <% if (fileLink) { %>
+        <div class="link-box">
+          <strong>Share this link:</strong>
+          <a href="<%= fileLink %>"><%= fileLink %></a>
+        </div>
+      <% } %>
+    </main>
+</body>
+</html>
