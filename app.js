@@ -16,7 +16,7 @@ const hasAppUploadLimit =
   Number.isFinite(configuredMaxUploadBytes) && configuredMaxUploadBytes > 0;
 const PASSWORD_MAX_ATTEMPTS = 3;
 const PASSWORD_LOCK_MINUTES = 10;
-const enforceCanonicalRedirect = process.env.ENFORCE_CANONICAL_REDIRECT !== "false";
+const enforceCanonicalRedirect = process.env.ENFORCE_CANONICAL_REDIRECT === "true";
 
 let canonicalUrl = null;
 try {
@@ -147,6 +147,10 @@ app.use((req, res, next) => {
 
 app.get("/", (req, res) => {
   res.render("index", { fileLink: null, error: null });
+});
+
+app.get("/about", (req, res) => {
+  res.render("about");
 });
 
 app.post("/api/upload", upload.single("file"), async (req, res) => {

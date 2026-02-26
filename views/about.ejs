@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About - BurnLink</title>
+  <style>
+    body {
+      font-family: Segoe UI, Arial, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f2f4f7;
+    }
+    .card {
+      width: min(620px, 92vw);
+      background: #fff;
+      border-radius: 10px;
+      padding: 1.25rem;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+    }
+    h1 {
+      margin-top: 0;
+    }
+    ul {
+      padding-left: 1.2rem;
+    }
+    .links {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+    .footer {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: #475467;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>About BurnLink</h1>
+    <p>BurnLink is a one-time file sharing app with browser-side end-to-end encryption.</p>
+
+    <ul>
+      <li>Files are encrypted in your browser before upload.</li>
+      <li>Server stores encrypted payload only.</li>
+      <li>Links are burned after first successful data fetch.</li>
+      <li>Password-protected files lock for 10 minutes after 3 wrong attempts.</li>
+    </ul>
+
+    <div class="links">
+      <a href="/">Back to Home</a>
+      <a href="https://github.com/Joy-Majumder" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </div>
+
+    <footer class="footer">
+      Developer: <a href="https://github.com/Joy-Majumder" target="_blank" rel="noopener noreferrer">Joy G. Majumdar</a>
+    </footer>
+  </main>
+</body>
+</html>
