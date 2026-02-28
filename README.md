@@ -12,7 +12,5 @@
 - Simple UX: built-in copy-link action.
 
 ## Author
-**joy0x1**
-
 - GitHub: [@joy0x1](https://github.com/joy0x1)
 - Focus: privacy-first file sharing and practical security.
