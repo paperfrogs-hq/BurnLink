@@ -188,6 +188,28 @@ app.get("/about", (req, res) => {
   res.render("about");
 });
 
+app.get("/health", async (req, res) => {
+  const supabaseUrl = process.env.SUPABASE_URL || "";
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "";
+
+  const status = {
+    url: supabaseUrl ? supabaseUrl.slice(0, 30) + "..." : "MISSING",
+    keyLength: supabaseKey.length,
+    bucket: bucket || "MISSING",
+    db: "untested",
+  };
+
+  try {
+    const { error } = await supabase.from(process.env.SUPABASE_FILES_TABLE || "files").select("id").limit(1);
+    status.db = error ? "FAIL: " + error.message : "OK";
+  } catch (e) {
+    status.db = "THROW: " + e.message;
+  }
+
+  res.json(status);
+});
+
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   let storagePath = null;
 
