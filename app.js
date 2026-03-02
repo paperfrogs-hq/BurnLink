@@ -79,15 +79,27 @@ async function removeFromStorage(storagePath) {
 }
 
 async function sendOneTimeEncryptedFile(res, file) {
-  const storedBuffer = await downloadFromStorage(file.path);
-
-  // Burn the link before sending data so the URL cannot be reused.
-  const deleted = await File.deleteById(file.id);
-  if (!deleted) {
-    return res.status(410).render("not-found");
+  // Check if view-once file has expired
+  if (file.mode === "view-once" && file.expiresAt) {
+    const expiresAt = new Date(file.expiresAt);
+    if (!isNaN(expiresAt) && expiresAt <= new Date()) {
+      await File.deleteById(file.id);
+      await removeFromStorage(file.path);
+      return res.status(410).render("not-found");
+    }
   }
 
-  await removeFromStorage(file.path);
+  const storedBuffer = await downloadFromStorage(file.path);
+
+  // Burn immediately ONLY if not in view-once mode
+  if (file.mode !== "view-once") {
+    const deleted = await File.deleteById(file.id);
+    if (!deleted) {
+      return res.status(410).render("not-found");
+    }
+    await removeFromStorage(file.path);
+  }
+
   res.setHeader("X-File-Name", encodeURIComponent(file.originalName));
   res.setHeader("Content-Type", "application/octet-stream");
   return res.send(storedBuffer);
@@ -188,6 +200,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 
     const originalName = req.body.originalName?.trim() || req.file.originalname || "file";
     const rawPassword = req.body.password?.trim() || "";
+    const mode = req.body.mode?.trim() || "download";
     const payload = req.file.buffer;
 
     if (
@@ -209,6 +222,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       path: storagePath,
       originalName,
       password: rawPassword || undefined,
+      mode,
     });
 
     const shareBaseUrl = canonicalUrl
@@ -246,6 +260,7 @@ app.get("/file/:id", async (req, res) => {
       error: null,
       fileId: file.id,
       requiresPassword: Boolean(file.password),
+      mode: file.mode || "download",
     });
   } catch (error) {
     return res.status(400).render("not-found");

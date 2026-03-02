@@ -179,6 +179,16 @@
       var fileDataBytes = new Uint8Array(fileData);
       var userPassword = passwordInput.value.trim();
 
+      // Get selected mode
+      var modeRadios = document.getElementsByName("mode");
+      var selectedMode = "download";
+      for (var i = 0; i < modeRadios.length; i++) {
+        if (modeRadios[i].checked) {
+          selectedMode = modeRadios[i].value;
+          break;
+        }
+      }
+
       var encryptedPayload;
       var linkKey = null;
       var hasPassword = Boolean(userPassword);
@@ -202,6 +212,7 @@
         file.name
       );
       formData.append("originalName", file.name);
+      formData.append("mode", selectedMode);
       if (userPassword) {
         formData.append("password", userPassword);
       }

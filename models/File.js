@@ -12,11 +12,14 @@ function mapRow(row) {
     password: row.password,
     failedAttempts: row.failed_attempts || 0,
     lockedUntil: row.locked_until || null,
+    mode: row.mode || "download",
+    expiresAt: row.expires_at || null,
   };
 }
 
-async function createFile({ path, originalName, password }) {
+async function createFile({ path, originalName, password, mode = "download" }) {
   const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
+  const expiresAt = mode === "view-once" ? new Date(Date.now() + 90000) : null;
 
   const { data, error } = await supabase
     .from(filesTable)
@@ -26,6 +29,8 @@ async function createFile({ path, originalName, password }) {
       password: hashedPassword,
       failed_attempts: 0,
       locked_until: null,
+      mode,
+      expires_at: expiresAt,
     })
     .select("*")
     .single();

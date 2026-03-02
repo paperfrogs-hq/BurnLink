@@ -7,379 +7,46 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>About - BurnLink</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(135deg, #0a0a0a 0%, #1a1410 100%);
-      color: #ffffff;
-      line-height: 1.6;
-      overflow-x: hidden;
-    }
-
-    @keyframes fadeInUp {
-      from {
-        opacity: 0;
-        transform: translateY(40px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes fadeInDown {
-      from {
-        opacity: 0;
-        transform: translateY(-40px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes slideInLeft {
-      from {
-        opacity: 0;
-        transform: translateX(-60px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-
-    header {
-      padding: 2rem 0;
-      position: sticky;
-      top: 0;
-      background: rgba(10, 10, 10, 0.8);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(255, 140, 0, 0.15);
-      z-index: 100;
-      animation: fadeInDown 0.8s ease-out;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 2rem;
-    }
-
-    .header-content {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .logo {
-      font-size: 1.8rem;
-      font-weight: 700;
-      background: linear-gradient(135deg, #ff8c00, #ffa500);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: -0.5px;
-    }
-
-    nav a {
-      text-decoration: none;
-      color: rgba(255, 255, 255, 0.7);
-      font-size: 0.95rem;
-      margin-left: 2rem;
-      transition: all 0.3s ease;
-      position: relative;
-    }
-
-    nav a:hover {
-      color: #ffffff;
-    }
-
-    nav a.active {
-      color: #ffffff;
-    }
-
-    nav a.active:after {
-      width: 100% !important;
-    }
-
-    nav a:after {
-      content: '';
-      position: absolute;
-      bottom: -5px;
-      left: 0;
-      width: 0;
-      height: 2px;
-      background: linear-gradient(135deg, #ff8c00, #ffa500);
-      transition: width 0.3s ease;
-    }
-
-    nav a:hover:after {
-      width: 100%;
-    }
-
-    main {
-      padding: 6rem 0;
-      min-height: calc(100vh - 140px);
-    }
-
-    .about-content {
-      max-width: 800px;
-      animation: slideInLeft 1s ease-out;
-    }
-
-    h1 {
-      font-size: 3.5rem;
-      line-height: 1.2;
-      margin-bottom: 1.5rem;
-      font-weight: 800;
-      letter-spacing: -1.5px;
-      background: linear-gradient(135deg, #ffffff, #ff8c00);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .intro {
-      font-size: 1.2rem;
-      color: rgba(255, 255, 255, 0.7);
-      margin-bottom: 3rem;
-      line-height: 1.8;
-    }
-
-    h2 {
-      font-size: 1.8rem;
-      font-weight: 700;
-      margin-top: 3rem;
-      margin-bottom: 1.5rem;
-      color: #ffffff;
-    }
-
-    ul {
-      list-style: none;
-      padding: 0;
-    }
-
-    li {
-      padding: 1rem 0;
-      font-size: 1.05rem;
-      color: rgba(255, 255, 255, 0.8);
-      position: relative;
-      padding-left: 1.5rem;
-      transition: transform 0.3s ease;
-    }
-
-    li:hover {
-      transform: translateX(10px);
-    }
-
-    li:before {
-      content: "→";
-      position: absolute;
-      left: 0;
-      color: #ff8c00;
-      font-weight: bold;
-    }
-
-    .features {
-      background: rgba(255, 140, 0, 0.08);
-      border: 1px solid rgba(255, 140, 0, 0.25);
-      border-radius: 16px;
-      padding: 2.5rem;
-      margin: 2.5rem 0;
-      backdrop-filter: blur(10px);
-    }
-
-    .feature-item {
-      margin-bottom: 2rem;
-      padding: 1.5rem;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 12px;
-      border: 1px solid rgba(255, 140, 0, 0.2);
-      transition: all 0.3s ease;
-    }
-
-    .feature-item:last-child {
-      margin-bottom: 0;
-    }
-
-    .feature-item:hover {
-      border-color: rgba(255, 140, 0, 0.5);
-      background: rgba(255, 140, 0, 0.05);
-      transform: translateY(-5px);
-    }
-
-    .feature-item strong {
-      display: block;
-      margin-bottom: 0.75rem;
-      font-size: 1.1rem;
-      color: #ffffff;
-    }
-
-    .feature-item p {
-      color: rgba(255, 255, 255, 0.7);
-      margin: 0;
-    }
-
-    .links {
-      display: flex;
-      gap: 1.5rem;
-      flex-wrap: wrap;
-      margin-top: 2.5rem;
-    }
-
-    a {
-      color: #ffa500;
-      text-decoration: none;
-      font-weight: 600;
-      transition: all 0.3s ease;
-      padding: 0.75rem 1.5rem;
-      border: 1px solid rgba(255, 165, 0, 0.3);
-      border-radius: 8px;
-    }
-
-    a:hover {
-      color: #ffffff;
-      border-color: #ffa500;
-      background: rgba(255, 165, 0, 0.1);
-      transform: translateY(-2px);
-    }
-
-    footer {
-      border-top: 1px solid rgba(255, 140, 0, 0.15);
-      padding: 4rem 0;
-      color: rgba(255, 255, 255, 0.6);
-      font-size: 0.95rem;
-      background: rgba(10, 10, 10, 0.5);
-      animation: fadeInUp 1.2s ease-out;
-    }
-
-    .footer-content {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 3rem;
-      margin-bottom: 2rem;
-    }
-
-    .footer-section h3 {
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      font-weight: 700;
-      margin-bottom: 1.5rem;
-      color: #ffffff;
-    }
-
-    .footer-section a {
-      display: block;
-      padding: 0;
-      border: none;
-      background: none;
-      color: rgba(255, 255, 255, 0.6);
-      text-decoration: none;
-      margin-bottom: 0.75rem;
-      transition: all 0.3s ease;
-    }
-
-    .footer-section a:hover {
-      color: #ffa500;
-      transform: translateX(5px);
-    }
-
-    .footer-bottom {
-      border-top: 1px solid rgba(255, 140, 0, 0.1);
-      padding-top: 2rem;
-      color: rgba(255, 255, 255, 0.5);
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0a0a0a; color: #fff; line-height: 1.6; overflow-x: hidden; min-height: 100vh; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; }
+    header { padding: 1.75rem 0; border-bottom: 1px solid #1e1e1e; position: sticky; top: 0; background: #0a0a0a; z-index: 100; }
+    .header-content { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 1rem; font-weight: 700; color: #ff8c00; text-decoration: none; letter-spacing: 0.08em; text-transform: uppercase; }
+    nav { display: flex; gap: 2.5rem; }
+    nav a { text-decoration: none; color: #666; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; transition: color 0.2s; }
+    nav a:hover, nav a.active { color: #fff; }
+    footer { border-top: 1px solid #1e1e1e; padding: 3rem 0; }
+    .footer-content { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; margin-bottom: 2rem; }
+    .footer-section h3 { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 1rem; color: #555; }
+    .footer-section a { display: block; color: #777; text-decoration: none; font-size: 0.85rem; margin-bottom: 0.5rem; transition: color 0.2s; }
+    .footer-section a:hover { color: #fff; }
+    .footer-bottom { border-top: 1px solid #1e1e1e; padding-top: 1.5rem; color: #444; font-size: 0.78rem; }
+    main { padding: 6rem 0 4rem; min-height: calc(100vh - 140px); }
+    .about-content { max-width: 700px; }
+    h1 { font-size: 3rem; line-height: 1.05; font-weight: 800; letter-spacing: -2px; color: #fff; margin-bottom: 1.5rem; }
+    .intro { font-size: 0.95rem; color: #888; line-height: 1.8; margin-bottom: 3rem; }
+    h2 { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #666; margin-top: 3rem; margin-bottom: 1.25rem; }
+    .plain-list { list-style: none; border-top: 1px solid #1e1e1e; }
+    .plain-list li { padding: 0.85rem 0; font-size: 0.9rem; color: #aaa; border-bottom: 1px solid #1e1e1e; display: flex; gap: 0.75rem; align-items: flex-start; }
+    .plain-list li::before { content: ""; display: inline-block; width: 4px; height: 4px; background: #ff8c00; border-radius: 50%; flex-shrink: 0; margin-top: 0.55rem; }
+    .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #1e1e1e; border: 1px solid #1e1e1e; margin: 2.5rem 0; }
+    .feature-item { background: #0a0a0a; padding: 1.75rem; }
+    .feature-item strong { display: block; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.04em; color: #fff; margin-bottom: 0.5rem; }
+    .feature-item p { font-size: 0.875rem; color: #777; line-height: 1.7; }
+    .cta-row { display: flex; gap: 1.5rem; margin-top: 3rem; flex-wrap: wrap; }
+    .btn { display: inline-block; padding: 0.8rem 1.5rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; text-decoration: none; transition: opacity 0.2s; }
+    .btn-primary { background: #ff8c00; color: #000; }
+    .btn-ghost { background: transparent; color: #aaa; border: 1px solid #333; }
+    .btn:hover { opacity: 0.8; }
     @media (max-width: 768px) {
-      body {
-        background: linear-gradient(135deg, #0a0a0a 0%, #1a1410 100%);
-      }
-
-      h1 {
-        font-size: 2.2rem;
-      }
-
-      h2 {
-        font-size: 1.4rem;
-      }
-
-      header {
-        padding: 1.5rem 0;
-      }
-
-      .container {
-        padding: 0 1.5rem;
-      }
-
-      .about-content {
-        padding: 0 1rem;
-      }
-
-      li {
-        font-size: 1rem;
-        padding: 0.75rem 0;
-        padding-left: 1.5rem;
-      }
-
-      .features {
-        padding: 1.5rem;
-        margin: 1.5rem 0;
-      }
-
-      .feature-item {
-        padding: 1rem;
-        margin-bottom: 1.5rem;
-      }
-
-      a {
-        display: block;
-        text-align: center;
-        margin-bottom: 0.75rem;
-        padding: 0.75rem 1rem;
-      }
-
-      .links {
-        flex-direction: column;
-        gap: 1rem;
-        margin-top: 1.5rem;
-      }
-
-      main {
-        padding: 2rem 0;
-      }
-
-      footer {
-        padding: 2rem 0;
-      }
-
-      .header-content {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: flex-start;
-      }
-
-      nav {
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-        width: 100%;
-      }
-
-      nav a {
-        margin-left: 0;
-        font-size: 0.9rem;
-      }
-
-      .footer-content {
-        grid-template-columns: 1fr;
-      }
+      nav { gap: 1.5rem; }
+      .header-content { flex-wrap: wrap; gap: 1rem; }
+      .footer-content { grid-template-columns: 1fr; gap: 1.5rem; }
+      main { padding: 3rem 0 2rem; }
+      h1 { font-size: 2.25rem; letter-spacing: -1px; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .cta-row { flex-direction: column; }
     }
   </style>
 </head>
@@ -387,11 +54,8 @@
   <header>
     <div class="container">
       <div class="header-content">
-        <div class="logo">BurnLink</div>
-        <nav>
-          <a href="/">Home</a>
-          <a href="/about" class="active">About</a>
-        </nav>
+        <a href="/" class="logo">BurnLink</a>
+        <nav><a href="/">Home</a><a href="/about" class="active">About</a></nav>
       </div>
     </div>
   </header>
@@ -400,48 +64,47 @@
     <div class="container">
       <div class="about-content">
         <h1>About BurnLink</h1>
-        
-        <p class="intro">BurnLink is a secure, private file sharing service that puts security and privacy at the core of every interaction. Share sensitive files with confidence knowing they're protected end-to-end.</p>
+        <p class="intro">BurnLink is a zero-knowledge file sharing service. Files are encrypted in your browser before they leave your device. We store only the encrypted payload and have no ability to read your data.</p>
 
-        <h2>How It Works</h2>
-        <ul>
-          <li>Files are encrypted in your browser before upload</li>
-          <li>Server stores only the encrypted payload, never has access to unencrypted data</li>
-          <li>Sharing links are burned after the first successful download</li>
-          <li>Optional password protection with 10-minute lockout after 3 wrong attempts</li>
-          <li>Zero-knowledge architecture—we can't access your files</li>
+        <h2>How it works</h2>
+        <ul class="plain-list">
+          <li>Your file is encrypted in-browser using AES-256-GCM before upload</li>
+          <li>The server stores only the encrypted payload, never unencrypted data</li>
+          <li>Sharing links are invalidated after the first download</li>
+          <li>Optional password protection with 10-minute lockout after 3 failed attempts</li>
+          <li>Zero-knowledge architecture — we cannot access your files</li>
         </ul>
 
-        <div class="features">
+        <div class="feature-grid">
           <div class="feature-item">
-            <strong>Privacy First</strong>
+            <strong>Privacy first</strong>
             <p>Your files are encrypted in your browser. We never see the unencrypted content.</p>
           </div>
           <div class="feature-item">
-            <strong>One-Time Access</strong>
-            <p>Files are deleted immediately after the first download, ensuring they're not available indefinitely.</p>
+            <strong>One-time access</strong>
+            <p>Files are deleted immediately after the first download.</p>
           </div>
           <div class="feature-item">
-            <strong>Optional Authentication</strong>
-            <p>Add password protection for additional security. Failed attempts trigger automatic lockouts.</p>
+            <strong>Optional passwords</strong>
+            <p>Add password protection for an extra layer of security.</p>
           </div>
           <div class="feature-item">
-            <strong>Built for Developers</strong>
-            <p>Open source, transparent, and built with privacy-conscious technology choices.</p>
+            <strong>Open source</strong>
+            <p>Transparent code, transparent choices. Auditable by anyone.</p>
           </div>
         </div>
 
         <h2>Why BurnLink?</h2>
-        <ul>
-          <li>Traditional cloud storage keeps files forever</li>
-          <li>Email attachments expose files through message systems</li>
-          <li>Most sharing services can access your data</li>
+        <ul class="plain-list">
+          <li>Traditional cloud storage keeps files indefinitely</li>
+          <li>Email attachments are exposed through message systems</li>
+          <li>Most sharing services can read your data</li>
           <li>BurnLink gives you control and privacy</li>
         </ul>
 
-        <div class="links">
-          <a href="/">← Back to Upload</a>
-          <a href="https://github.com/Joy-Majumder/BurnLink" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+        <div class="cta-row">
+          <a href="/" class="btn btn-primary">Share a file</a>
+          <a href="https://github.com/Joy-Majumder/BurnLink" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">View on GitHub</a>
         </div>
       </div>
     </div>
@@ -452,8 +115,8 @@
       <div class="footer-content">
         <div class="footer-section">
           <h3>Product</h3>
-          <a href="/">Share Files</a>
-          <a href="/about">How It Works</a>
+          <a href="/">Share files</a>
+          <a href="/about">How it works</a>
         </div>
         <div class="footer-section">
           <h3>Resources</h3>

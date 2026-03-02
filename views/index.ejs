@@ -15,535 +15,79 @@
   <meta name="twitter:description" content="Share files. Encrypted. Ephemeral. One-time links, browser-side encryption, no permanent storage." />
   <title>BurnLink — Share files. Encrypted. Ephemeral.</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(135deg, #0a0a0a 0%, #1a1410 100%);
-      color: #ffffff;
-      line-height: 1.6;
-      overflow-x: hidden;
-      min-height: 100vh;
+      background: #0a0a0a; color: #fff; line-height: 1.6; overflow-x: hidden; min-height: 100vh;
     }
-
-    @keyframes fadeInUp {
-      from {
-        opacity: 0;
-        transform: translateY(40px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes fadeInDown {
-      from {
-        opacity: 0;
-        transform: translateY(-40px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes slideInRight {
-      from {
-        opacity: 0;
-        transform: translateX(60px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-
-    @keyframes glow {
-      0%, 100% {
-        box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
-      }
-      50% {
-        box-shadow: 0 0 40px rgba(99, 102, 241, 0.6);
-      }
-    }
-
-    @keyframes float {
-      0%, 100% {
-        transform: translateY(0px);
-      }
-      50% {
-        transform: translateY(-20px);
-      }
-    }
-
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; }
     header {
-      padding: 2rem 0;
-      position: sticky;
-      top: 0;
-      background: rgba(10, 10, 10, 0.8);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(255, 140, 0, 0.15);
-      z-index: 100;
-      animation: fadeInDown 0.8s ease-out;
+      padding: 1.75rem 0; border-bottom: 1px solid #1e1e1e;
+      position: sticky; top: 0; background: #0a0a0a; z-index: 100;
     }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 2rem;
-    }
-
-    .header-content {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .logo {
-      font-size: 1.8rem;
-      font-weight: 700;
-      background: linear-gradient(135deg, #ff8c00, #ffa500);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: -0.5px;
-    }
-
-    nav a {
-      text-decoration: none;
-      color: rgba(255, 255, 255, 0.7);
-      font-size: 0.95rem;
-      margin-left: 2rem;
-      transition: all 0.3s ease;
-      position: relative;
-    }
-
-    nav a:hover {
-      color: #ffffff;
-    }
-
-    nav a.active {
-      color: #ffffff;
-    }
-
-    nav a.active:after {
-      width: 100% !important;
-    }
-
-    nav a:after {
-      content: '';
-      position: absolute;
-      bottom: -5px;
-      left: 0;
-      width: 0;
-      height: 2px;
-      background: linear-gradient(135deg, #ff8c00, #ffa500);
-      transition: width 0.3s ease;
-    }
-
-    nav a:hover:after {
-      width: 100%;
-    }
-
-    main {
-      padding: 6rem 0;
-      min-height: calc(100vh - 140px);
-      display: flex;
-      align-items: center;
-    }
-
-    .hero {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6rem;
-      align-items: center;
-    }
-
-    .hero-content {
-      animation: fadeInUp 1s ease-out;
-    }
-
-    .hero-content h1 {
-      font-size: 4rem;
-      line-height: 1.1;
-      margin-bottom: 1.5rem;
-      font-weight: 800;
-      letter-spacing: -2px;
-      background: linear-gradient(135deg, #ffffff, #ff8c00);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .hero-content p {
-      font-size: 1.2rem;
-      color: rgba(255, 255, 255, 0.7);
-      margin-bottom: 2.5rem;
-      line-height: 1.8;
-    }
-
-    .features-list {
-      list-style: none;
-      margin-bottom: 2rem;
-    }
-
-    .features-list li {
-      padding: 1rem 0;
-      font-size: 1.05rem;
-      color: rgba(255, 255, 255, 0.8);
-      display: flex;
-      align-items: center;
-      transition: transform 0.3s ease;
-    }
-
-    .features-list li:hover {
-      transform: translateX(10px);
-    }
-
-    .features-list li:before {
-      content: "→";
-      margin-right: 1rem;
-      font-weight: bold;
-      color: #ff8c00;
-      font-size: 1.2rem;
-    }
-
-    .upload-section {
-      background: rgba(255, 140, 0, 0.08);
-      border: 1px solid rgba(255, 140, 0, 0.25);
-      border-radius: 16px;
-      padding: 2.5rem;
-      backdrop-filter: blur(10px);
-      animation: slideInRight 1s ease-out 0.2s both;
-    }
-
-    .upload-section h2 {
-      font-size: 1.8rem;
-      margin-bottom: 2rem;
-      font-weight: 700;
-      color: #ffffff;
-    }
-
-    form {
-      display: grid;
-      gap: 1.5rem;
-    }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-    }
-
-    label {
-      font-size: 0.95rem;
-      font-weight: 600;
-      margin-bottom: 0.75rem;
-      color: rgba(255, 255, 255, 0.9);
-      text-transform: capitalize;
-    }
-
-    input[type="file"],
-    input[type="password"] {
-      font-size: 1rem;
-      padding: 1rem;
-      border: 1px solid rgba(255, 140, 0, 0.3);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      color: #ffffff;
-      font-family: inherit;
-      transition: all 0.3s ease;
-      min-height: 44px;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      appearance: none;
-    }
-
-    input[type="file"]::file-selector-button {
-      cursor: pointer;
-      padding: 0.5rem 1rem;
-      background: rgba(255, 140, 0, 0.2);
-      border: 1px solid rgba(255, 140, 0, 0.3);
-      border-radius: 6px;
-      color: #ffffff;
-      font-weight: 600;
-      transition: all 0.2s ease;
-      margin-right: 0.5rem;
-    }
-
-    input[type="file"]::file-selector-button:hover {
-      background: rgba(255, 140, 0, 0.3);
-    }
-
-    input[type="password"]::placeholder {
-      color: rgba(255, 255, 255, 0.5);
-    }
-
-    input[type="file"]:focus,
-    input[type="password"]:focus {
-      outline: none;
-      border-color: #ff8c00;
-      background: rgba(255, 140, 0, 0.1);
-      box-shadow: 0 0 20px rgba(255, 140, 0, 0.3);
-    }
-
-    button {
-      background: linear-gradient(135deg, #ff8c00, #ffa500);
-      color: #ffffff;
-      border: none;
-      padding: 1rem 2rem;
-      font-size: 1rem;
-      border-radius: 10px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: all 0.3s ease;
-      box-shadow: 0 8px 25px rgba(255, 140, 0, 0.4);
-      min-height: 44px;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      appearance: none;
-      border: none;
-    }
-
-    button:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 35px rgba(255, 140, 0, 0.6);
-    }
-
-    button:active:not(:disabled) {
-      transform: translateY(0);
-    }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .error {
-      background: rgba(239, 68, 68, 0.1);
-      color: #fca5a5;
-      padding: 1rem;
-      border-radius: 10px;
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      font-size: 0.95rem;
-      animation: fadeInUp 0.5s ease-out;
-    }
-
-    .link-box {
-      background: rgba(255, 140, 0, 0.08);
-      border: 1px solid rgba(255, 140, 0, 0.3);
-      border-radius: 10px;
-      padding: 2rem;
-      margin-top: 1.5rem;
-      animation: fadeInUp 0.5s ease-out;
-    }
-
-    .link-box strong {
-      display: block;
-      margin-bottom: 1rem;
-      color: #ffffff;
-      font-size: 1.05rem;
-    }
-
-    #share-link {
-      display: block;
-      word-break: break-all;
-      padding: 1rem;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 140, 0, 0.5);
-      border-radius: 8px;
-      margin-bottom: 1rem;
-      color: #ffa500;
-      text-decoration: none;
-      font-family: "Monaco", "Courier New", monospace;
-      font-size: 0.9rem;
-      transition: all 0.3s ease;
-    }
-
-    #share-link:hover {
-      background: rgba(255, 140, 0, 0.1);
-      border-color: #ffa500;
-    }
-
-    .link-actions {
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    #copy-link-btn {
-      background: linear-gradient(135deg, #ff8c00, #ffa500);
-      padding: 0.75rem 1.5rem;
-      font-size: 0.95rem;
-      box-shadow: 0 6px 20px rgba(255, 140, 0, 0.4);
-    }
-
-    #copy-link-btn:hover {
-      box-shadow: 0 10px 30px rgba(255, 140, 0, 0.6);
-    }
-
-    .status {
-      font-size: 0.9rem;
-      color: #ffa500;
-      font-weight: 600;
-      animation: fadeInUp 0.3s ease;
-    }
-
-    .status.error {
-      color: #fca5a5;
-    }
-
-    footer {
-      border-top: 1px solid rgba(255, 140, 0, 0.15);
-      padding: 4rem 0;
-      color: rgba(255, 255, 255, 0.6);
-      font-size: 0.95rem;
-      background: rgba(10, 10, 10, 0.5);
-      animation: fadeInUp 1.2s ease-out;
-    }
-
-    .footer-content {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 3rem;
-      margin-bottom: 2rem;
-    }
-
-    .footer-section h3 {
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      font-weight: 700;
-      margin-bottom: 1.5rem;
-      color: #ffffff;
-    }
-
-    .footer-section a {
-      display: block;
-      color: rgba(255, 255, 255, 0.6);
-      text-decoration: none;
-      margin-bottom: 0.75rem;
-      transition: all 0.3s ease;
-    }
-
-    .footer-section a:hover {
-      color: #ffa500;
-      transform: translateX(5px);
-    }
-
-    .footer-bottom {
-      border-top: 1px solid rgba(255, 140, 0, 0.1);
-      padding-top: 2rem;
-      color: rgba(255, 255, 255, 0.5);
-    }
-
+    .header-content { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 1rem; font-weight: 700; color: #ff8c00; text-decoration: none; letter-spacing: 0.08em; text-transform: uppercase; }
+    nav { display: flex; gap: 2.5rem; }
+    nav a { text-decoration: none; color: #666; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; transition: color 0.2s; }
+    nav a:hover, nav a.active { color: #fff; }
+    footer { border-top: 1px solid #1e1e1e; padding: 3rem 0; }
+    .footer-content { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; margin-bottom: 2rem; }
+    .footer-section h3 { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 1rem; color: #555; }
+    .footer-section a { display: block; color: #777; text-decoration: none; font-size: 0.85rem; margin-bottom: 0.5rem; transition: color 0.2s; }
+    .footer-section a:hover { color: #fff; }
+    .footer-bottom { border-top: 1px solid #1e1e1e; padding-top: 1.5rem; color: #444; font-size: 0.78rem; }
+    .error-msg { background: #1a0000; color: #ff6b6b; padding: 0.9rem 1rem; border: 1px solid #2a0000; font-size: 0.88rem; margin-bottom: 1.25rem; }
     @media (max-width: 768px) {
-      body {
-        background: linear-gradient(135deg, #0a0a0a 0%, #1a1410 100%);
-      }
-
-      header {
-        padding: 1.5rem 0;
-      }
-
-      .container {
-        padding: 0 1.5rem;
-      }
-
-      .hero {
-        grid-template-columns: 1fr;
-        gap: 2rem;
-      }
-
-      .hero-content h1 {
-        font-size: 2rem;
-      }
-
-      .hero-content p {
-        font-size: 1rem;
-      }
-
-      .features-list li {
-        font-size: 0.95rem;
-        padding: 0.75rem 0;
-      }
-
-      .upload-section {
-        padding: 2rem;
-        border-radius: 12px;
-      }
-
-      .upload-section h2 {
-        font-size: 1.4rem;
-        margin-bottom: 1.5rem;
-      }
-
-      input[type="file"],
-      input[type="password"] {
-        font-size: 16px;
-        padding: 0.75rem;
-      }
-
-      button {
-        width: 100%;
-        padding: 0.875rem 1.5rem;
-        font-size: 0.95rem;
-      }
-
-      .link-actions {
-        flex-direction: column;
-        gap: 0.75rem;
-      }
-
-      #copy-link-btn {
-        width: 100%;
-      }
-
-      #share-link {
-        font-size: 0.8rem;
-        padding: 0.75rem;
-        word-break: break-word;
-      }
-
-      .footer-content {
-        grid-template-columns: 1fr;
-        gap: 1.5rem;
-      }
-
-      .footer-section h3 {
-        font-size: 0.75rem;
-      }
-
-      footer {
-        padding: 2rem 0;
-      }
-
-      main {
-        padding: 2rem 0;
-      }
-
-      .header-content {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: flex-start;
-      }
-
-      nav {
-        display: flex;
-        gap: 1rem;
-        flex-wrap: wrap;
-        width: 100%;
-      }
-
-      nav a {
-        margin-left: 0;
-        font-size: 0.9rem;
-      }
+      nav { gap: 1.5rem; }
+      .header-content { flex-wrap: wrap; gap: 1rem; }
+      .footer-content { grid-template-columns: 1fr; gap: 1.5rem; }
+    }
+    main { padding: 6rem 0 4rem; min-height: calc(100vh - 140px); }
+    .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 8rem; align-items: start; }
+    .hero-content h1 { font-size: 3.5rem; line-height: 1.05; font-weight: 800; letter-spacing: -2px; color: #fff; margin-bottom: 1.5rem; }
+    .hero-content p { font-size: 0.95rem; color: #888; margin-bottom: 2.5rem; line-height: 1.8; max-width: 380px; }
+    .features-list { list-style: none; border-top: 1px solid #1e1e1e; }
+    .features-list li { padding: 0.85rem 0; font-size: 0.88rem; color: #aaa; border-bottom: 1px solid #1e1e1e; display: flex; align-items: center; gap: 0.75rem; }
+    .features-list li::before { content: ""; display: inline-block; width: 4px; height: 4px; background: #ff8c00; border-radius: 50%; flex-shrink: 0; }
+    .upload-section { border: 1px solid #1e1e1e; padding: 2.5rem; }
+    .upload-section h2 { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #666; margin-bottom: 2rem; }
+    form { display: grid; gap: 1.25rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
+    label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #666; }
+    input[type="file"], input[type="password"] {
+      font-size: 0.9rem; padding: 0.85rem 1rem; border: 1px solid #222; background: #111;
+      color: #fff; font-family: inherit; transition: border-color 0.2s; min-height: 44px;
+      -webkit-appearance: none; appearance: none; border-radius: 0; width: 100%;
+    }
+    input[type="file"]::file-selector-button {
+      cursor: pointer; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px solid #2a2a2a;
+      border-radius: 0; color: #bbb; font-size: 0.78rem; font-weight: 500; margin-right: 0.75rem;
+    }
+    input[type="password"]::placeholder { color: #444; }
+    input[type="file"]:focus, input[type="password"]:focus { outline: none; border-color: #ff8c00; }
+    button {
+      background: #ff8c00; color: #000; border: none; padding: 0.9rem 1.5rem;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      cursor: pointer; transition: opacity 0.2s; min-height: 44px;
+      -webkit-appearance: none; appearance: none; border-radius: 0; width: 100%; font-family: inherit;
+    }
+    button:hover:not(:disabled) { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .link-box { border: 1px solid #1e1e1e; padding: 1.5rem; margin-top: 1.5rem; }
+    .link-box strong { display: block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #666; margin-bottom: 1rem; }
+    #share-link { display: block; word-break: break-all; padding: 0.85rem 1rem; background: #111; border: 1px solid #222; margin-bottom: 1rem; color: #ff8c00; text-decoration: none; font-family: "Monaco", "Courier New", monospace; font-size: 0.8rem; }
+    .link-actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    #copy-link-btn { width: auto; padding: 0.7rem 1.25rem; }
+    .status { font-size: 0.8rem; color: #ff8c00; font-weight: 500; }
+    .status.error { color: #ff6b6b; }
+    @media (max-width: 768px) {
+      .hero { grid-template-columns: 1fr; gap: 3rem; }
+      .hero-content h1 { font-size: 2.25rem; letter-spacing: -1px; }
+      .hero-content p { max-width: 100%; }
+      .upload-section { padding: 1.5rem; }
+      input[type="file"], input[type="password"] { font-size: 16px; }
+      .link-actions { flex-direction: column; }
+      #copy-link-btn { width: 100%; }
     }
   </style>
 </head>
@@ -551,11 +95,8 @@
   <header>
     <div class="container">
       <div class="header-content">
-        <div class="logo">BurnLink</div>
-        <nav>
-          <a href="/" class="active">Home</a>
-          <a href="/about">About</a>
-        </nav>
+        <a href="/" class="logo">BurnLink</a>
+        <nav><a href="/" class="active">Home</a><a href="/about">About</a></nav>
       </div>
     </div>
   </header>
@@ -566,42 +107,48 @@
         <div class="hero-content">
           <h1>Share files.<br>Encrypted.<br>Ephemeral.</h1>
           <p>Files are encrypted in your browser before upload. Links burn after one download. We never see your data.</p>
-          
           <ul class="features-list">
-            <li>Browser-side encryption</li>
+            <li>Browser-side AES-256 encryption</li>
             <li>One-time download links</li>
             <li>Password protection available</li>
             <li>No file stored permanently</li>
           </ul>
         </div>
-
         <div class="upload-section">
-          <h2>Upload File</h2>
-          
+          <h2>Upload a file</h2>
           <% if (error) { %>
-            <p class="error"><%= error %></p>
+            <p class="error-msg"><%= error %></p>
           <% } %>
-
           <form id="upload-form" method="post" action="/upload" enctype="multipart/form-data">
             <div class="form-group">
-              <label for="file">Select File</label>
+              <label for="file">Select file</label>
               <input type="file" id="file" name="file" required />
             </div>
-
             <div class="form-group">
-              <label for="password">Password (Optional)</label>
-              <input type="password" id="password" name="password" placeholder="Leave empty for public access" />
+              <label for="password">Password (optional)</label>
+              <input type="password" id="password" name="password" placeholder="Leave empty for link-only access" />
             </div>
-
-            <button id="upload-btn" type="submit">Encrypt & Upload</button>
+            <div class="form-group">
+              <label>Share mode</label>
+              <div style="display: flex; gap: 0.75rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; flex: 1;">
+                  <input type="radio" name="mode" value="view-once" checked required style="width: 16px; height: 16px;" />
+                  <span style="font-size: 0.85rem; color: #aaa;">View once (90 sec, no download)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; flex: 1;">
+                  <input type="radio" name="mode" value="download" required style="width: 16px; height: 16px;" />
+                  <span style="font-size: 0.85rem; color: #aaa;">Download file</span>
+                </label>
+              </div>
+            </div>
+            <button id="upload-btn" type="submit">Encrypt &amp; Upload</button>
             <span id="upload-status" class="status" aria-live="polite"></span>
           </form>
-
           <div id="link-box" class="link-box" hidden>
-            <strong>Your secure link is ready:</strong>
+            <strong>Your secure link</strong>
             <a id="share-link" href="#"></a>
             <div class="link-actions">
-              <button id="copy-link-btn" type="button">Copy Link</button>
+              <button id="copy-link-btn" type="button">Copy link</button>
               <span id="copy-status" class="status" aria-live="polite"></span>
             </div>
           </div>
@@ -615,8 +162,8 @@
       <div class="footer-content">
         <div class="footer-section">
           <h3>Product</h3>
-          <a href="/">Share Files</a>
-          <a href="/about">How It Works</a>
+          <a href="/">Share files</a>
+          <a href="/about">How it works</a>
         </div>
         <div class="footer-section">
           <h3>Resources</h3>
