@@ -26,13 +26,6 @@ BurnLink is an open-source, privacy-first file sharing platform with browser-sid
 4. **Share**: Get a shareable link (with optional password)
 5. **Download**: Recipient decrypts in browser, then the link burns
 
-## Tech Stack
-
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript
-- **Backend**: Express.js, Node.js
-- **Storage**: Supabase Storage
-- **Encryption**: Web Crypto API (AES-GCM, PBKDF2)
-- **Database**: Supabase PostgreSQL
 
 ## Security
 
@@ -45,7 +38,7 @@ BurnLink is an open-source, privacy-first file sharing platform with browser-sid
 
 ## License
 
-MIT © [Joy Majumdar](https://github.com/Joy-Majumder)
+MIT © [Joy G. Majumdar](https://github.com/Joy-Majumder)
 
 ## Contributing
 
@@ -54,3 +47,7 @@ Contributions are welcome. Feel free to open issues and pull requests.
 ## Support
 
 For issues or questions, [open an issue](https://github.com/Joy-Majumder/BurnLink/issues) on GitHub.
+
+---
+
+BurnLink is a product of [Paperfrogs Lab](https://paperfrogs.dev) — an infrastructure-first studio building research-driven, production-ready tools.

@@ -104,8 +104,19 @@
       h1 { font-size: 2rem; letter-spacing: -1px; }
       .stats-bar { grid-template-columns: 1fr 1fr; }
       .recog-grid { grid-template-columns: 1fr 1fr; }
+      .findings-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
       .findings-table th:nth-child(5),
       .findings-table td:nth-child(5) { display: none; }
+      .cta-row { flex-direction: column; }
+    }
+    @media (max-width: 480px) {
+      .container { padding: 0 1rem; }
+      .logo img { height: 38px; }
+      h1 { font-size: 1.65rem; letter-spacing: -0.5px; }
+      .stats-bar { grid-template-columns: 1fr 1fr; }
+      .recog-grid { grid-template-columns: 1fr; }
+      .findings-table th:nth-child(4),
+      .findings-table td:nth-child(4) { display: none; }
     }
   </style>
   <script defer src="https://cloud.umami.is/script.js" data-website-id="5557b587-f2e2-4eb6-8edd-582164ff68da"></script>
