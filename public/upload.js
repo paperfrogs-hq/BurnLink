@@ -226,11 +226,13 @@
         var message = "Upload failed. Please try again.";
         try {
           var errorBody = await response.json();
-          if (errorBody && errorBody.error) {
+          if (errorBody && errorBody.detail) {
+            message = "Error: " + errorBody.detail;
+          } else if (errorBody && errorBody.error) {
             message = errorBody.error;
           }
         } catch (e) {
-          // response was not JSON, use default message
+          message = "Upload failed (HTTP " + response.status + ")";
         }
         throw new Error(message);
       }

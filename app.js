@@ -365,6 +365,28 @@ app.post("/file/:id/raw", async (req, res) => {
   }
 });
 
+// Explicit burn endpoint — called by client when view-once timer expires or user closes
+app.post("/file/:id/burn", async (req, res) => {
+  const id = req.params.id;
+  console.log(`[burn] Request received for file id=${id}`);
+  try {
+    const file = await File.findById(id);
+    if (!file) {
+      console.log(`[burn] File not found id=${id} — already deleted, treating as success`);
+      return res.json({ ok: true, alreadyGone: true });
+    }
+    console.log(`[burn] Found file id=${id} path=${file.path} mode=${file.mode}`);
+    await File.deleteById(file.id);
+    console.log(`[burn] DB record deleted id=${id}`);
+    await removeFromStorage(file.path);
+    console.log(`[burn] Storage deleted path=${file.path}`);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error(`[burn] ERROR for id=${id}:`, error.message, error.stack);
+    return res.status(500).json({ ok: false, error: error.message || "Burn failed." });
+  }
+});
+
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
     const maxMb = Math.floor(configuredMaxUploadBytes / 1024 / 1024);
