@@ -90,17 +90,28 @@ async function sendOneTimeEncryptedFile(res, file) {
     }
   }
 
-  const storedBuffer = await downloadFromStorage(file.path);
-
-  // Burn immediately ONLY if not in view-once mode
-  if (file.mode !== "view-once") {
-    const deleted = await File.deleteById(file.id);
-    if (!deleted) {
-      return res.status(410).render("not-found");
-    }
-    await removeFromStorage(file.path);
+  // Atomically claim this file by deleting the DB record FIRST.
+  // This prevents a race condition where two concurrent requests both
+  // retrieve and serve the same encrypted payload.
+  // The first caller gets deleted=true and proceeds; any concurrent
+  // caller gets deleted=false and receives 410 without touching storage.
+  const deleted = await File.deleteById(file.id);
+  if (!deleted) {
+    return res.status(410).render("not-found");
   }
 
+  // Only retrieve bytes AFTER the DB record is atomically claimed.
+  let storedBuffer;
+  try {
+    storedBuffer = await downloadFromStorage(file.path);
+  } catch (storageError) {
+    // DB record is already gone; clean up storage best-effort then re-throw.
+    await removeFromStorage(file.path).catch(() => {});
+    throw storageError;
+  }
+  await removeFromStorage(file.path);
+
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
   res.setHeader("X-File-Name", encodeURIComponent(file.originalName));
   res.setHeader("Content-Type", "application/octet-stream");
   return res.send(storedBuffer);
@@ -177,12 +188,12 @@ app.use((req, res, next) => {
   res.setHeader("X-XSS-Protection", "0"); // disabled — CSP is the correct defence
   res.setHeader("Content-Security-Policy", [
     "default-src 'none'",
-    `script-src 'self' 'nonce-${nonce}'`,
+    `script-src 'self' 'nonce-${nonce}' https://cloud.umami.is`,
     "style-src 'unsafe-inline'",
     "img-src 'self' blob: data: https://api.producthunt.com",
     "media-src 'self' blob:",
     "font-src 'self'",
-    "connect-src 'self'",
+    "connect-src 'self' https://cloud.umami.is",
     "frame-src blob:",
     "form-action 'self'",
     "base-uri 'self'",
@@ -278,6 +289,22 @@ app.get("/", (req, res) => {
 
 app.get("/about", (req, res) => {
   res.render("about");
+});
+
+// ── Responsible disclosure policy ─────────────────────────────────────────
+app.get("/.well-known/security.txt", (req, res) => {
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.send([
+    "Contact: mailto:security@burnlink.page",
+    "Expires: 2027-01-01T00:00:00.000Z",
+    "Preferred-Languages: en",
+    "Canonical: https://burnlink.page/.well-known/security.txt",
+    "Policy: https://burnlink.page/security-policy",
+    "",
+    "# Scope: *.burnlink.page",
+    "# In-scope: client-side crypto flaws, one-time link bypass, IDOR, auth bypass",
+    "# Please report vulnerabilities responsibly before public disclosure.",
+  ].join("\n"));
 });
 
 app.get("/health", async (req, res) => {

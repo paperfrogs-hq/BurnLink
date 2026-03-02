@@ -77,6 +77,34 @@
     );
   }
 
+  // Derives a server-side authentication token from the password.
+  // A low-iteration PBKDF2 with a fixed public salt is used so the raw
+  // password never leaves the browser; the server only ever stores a
+  // bcrypt hash of this derived token — not the actual encryption key.
+  async function deriveServerToken(password) {
+    var baseKey = await crypto.subtle.importKey(
+      "raw",
+      textEncoder.encode(password),
+      "PBKDF2",
+      false,
+      ["deriveKey"]
+    );
+    var derivedKey = await crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: textEncoder.encode("burnlink-server-auth-v1"),
+        iterations: 1000,
+        hash: "SHA-256",
+      },
+      baseKey,
+      { name: "AES-GCM", length: 256 },
+      true,
+      ["encrypt"]
+    );
+    var raw = new Uint8Array(await crypto.subtle.exportKey("raw", derivedKey));
+    return Array.from(raw).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  }
+
   async function generateLinkKey() {
     var key = await crypto.subtle.generateKey(
       { name: "AES-GCM", length: 256 },
@@ -214,7 +242,8 @@
       formData.append("originalName", file.name);
       formData.append("mode", selectedMode);
       if (userPassword) {
-        formData.append("password", userPassword);
+        var serverToken = await deriveServerToken(userPassword);
+        formData.append("password", serverToken);
       }
 
       var response = await fetch("/api/upload", {
