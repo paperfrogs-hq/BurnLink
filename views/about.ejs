@@ -100,6 +100,14 @@
       color: #ffffff;
     }
 
+    nav a.active {
+      color: #ffffff;
+    }
+
+    nav a.active:after {
+      width: 100% !important;
+    }
+
     nav a:after {
       content: '';
       position: absolute;
@@ -382,7 +390,7 @@
         <div class="logo">BurnLink</div>
         <nav>
           <a href="/">Home</a>
-          <a href="/about">About</a>
+          <a href="/about" class="active">About</a>
         </nav>
       </div>
     </div>

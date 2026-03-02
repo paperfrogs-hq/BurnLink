@@ -127,6 +127,14 @@
       color: #ffffff;
     }
 
+    nav a.active {
+      color: #ffffff;
+    }
+
+    nav a.active:after {
+      width: 100% !important;
+    }
+
     nav a:after {
       content: '';
       position: absolute;
@@ -545,7 +553,7 @@
       <div class="header-content">
         <div class="logo">BurnLink</div>
         <nav>
-          <a href="/">Home</a>
+          <a href="/" class="active">Home</a>
           <a href="/about">About</a>
         </nav>
       </div>
@@ -575,9 +583,6 @@
           <% } %>
 
           <form id="upload-form" method="post" action="/upload" enctype="multipart/form-data">
-            <noscript>
-              <div class="error" style="margin-bottom:1rem;">JavaScript is required for encrypted uploads. Please enable JavaScript in your browser.</div>
-            </noscript>
             <div class="form-group">
               <label for="file">Select File</label>
               <input type="file" id="file" name="file" required />
