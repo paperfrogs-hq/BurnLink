@@ -25,6 +25,13 @@ const r2CspOrigin = process.env.R2_ACCOUNT_ID
   ? `https://*.r2.cloudflarestorage.com`
   : null;
 
+// Secret used to sign one-time R2 cleanup tokens.
+// Falls back to the R2 secret key so no extra env var is required.
+const CLEANUP_SECRET = process.env.CLEANUP_TOKEN_SECRET || process.env.R2_SECRET_ACCESS_KEY || "burnlink-cleanup-v1";
+function makeCleanupToken(storagePath) {
+  return crypto.createHmac("sha256", CLEANUP_SECRET).update(storagePath).digest("hex");
+}
+
 let canonicalUrl = null;
 try {
   canonicalUrl = new URL(canonicalBaseUrl);
@@ -70,37 +77,25 @@ async function sendOneTimeEncryptedFile(res, file) {
     return res.status(410).render("not-found");
   }
 
-  // Stream directly from R2 to the client — never buffer the whole file in
-  // memory. This avoids heap exhaustion on large files and means the first
-  // bytes reach the client almost immediately.
-  let bodyStream, contentLength;
+  // Return a short-lived presigned GET URL so the browser downloads directly
+  // from R2. The Netlify function only handles this tiny JSON response
+  // (~500ms) regardless of file size — no more 26s timeout kills.
+  // A signed cleanup token lets the client tell us when to delete the R2 object.
+  const PRESIGN_TTL = 5 * 60; // 5 minutes
+  let downloadUrl;
   try {
-    ({ stream: bodyStream, contentLength } = await streamFromStorage(file.path));
-  } catch (storageError) {
-    // DB record is already gone; clean up storage best-effort then re-throw.
+    downloadUrl = await getPresignedGetUrl(file.path, PRESIGN_TTL);
+  } catch (err) {
     await removeFromStorage(file.path).catch(() => {});
-    throw storageError;
+    throw err;
   }
 
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
-  res.setHeader("X-File-Name", encodeURIComponent(file.originalName));
-  res.setHeader("Content-Type", "application/octet-stream");
-  if (contentLength) {
-    res.setHeader("Content-Length", contentLength);
-  }
-
-  // Pipe stream to client. Delete from R2 immediately when done —
-  // whether the transfer completed normally or the client disconnected.
-  // Guard flag prevents the double-delete if both events fire.
-  bodyStream.pipe(res);
-  let r2Cleaned = false;
-  const cleanupR2 = () => {
-    if (r2Cleaned) return;
-    r2Cleaned = true;
-    removeFromStorage(file.path).catch(() => {});
-  };
-  res.on("finish", cleanupR2); // stream fully sent
-  res.on("close", cleanupR2);  // client disconnected early
+  return res.json({
+    downloadUrl,
+    fileName: file.originalName,
+    storagePath: file.path,
+    cleanupToken: makeCleanupToken(file.path),
+  });
 }
 
 function getActiveLock(file) {
@@ -394,6 +389,31 @@ app.post("/api/commit", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
     await removeFromStorage(storagePath).catch(() => {});
     return res.status(500).json({ error: "Upload failed. Please try again." });
   }
+});
+
+// Called by the browser after it finishes downloading the encrypted file from R2.
+// Validates the HMAC cleanup token (signed with CLEANUP_SECRET) then deletes
+// the R2 object immediately. This is a fast operation — no size/timeout risk.
+app.post("/api/r2-cleanup", rateLimit(60, 60 * 1000), async (req, res) => {
+  const { storagePath, cleanupToken } = req.body;
+  if (!storagePath || !STORAGE_PATH_RE.test(storagePath) || !cleanupToken) {
+    return res.status(400).json({ ok: false, error: "Invalid request." });
+  }
+  const expected = makeCleanupToken(storagePath);
+  // Constant-time comparison; wrap in try-catch in case token isn't valid hex
+  let tokenValid = false;
+  try {
+    tokenValid =
+      cleanupToken.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(cleanupToken, "hex"), Buffer.from(expected, "hex"));
+  } catch (_) {
+    tokenValid = false;
+  }
+  if (!tokenValid) {
+    return res.status(403).json({ ok: false, error: "Invalid token." });
+  }
+  await removeFromStorage(storagePath).catch(() => {});
+  return res.json({ ok: true });
 });
 
 app.post("/api/upload", rateLimit(10, 10 * 60 * 1000), upload.single("file"), async (req, res) => {
