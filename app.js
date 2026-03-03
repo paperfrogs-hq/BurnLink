@@ -70,31 +70,37 @@ async function sendOneTimeEncryptedFile(res, file) {
     return res.status(410).render("not-found");
   }
 
-  // Generate a short-lived presigned GET URL so the browser downloads directly
-  // from R2.  This completely avoids serverless function timeouts on large files
-  // and eliminates the false "already used" error caused by the DB record being
-  // gone before the stream could complete.
-  const PRESIGN_TTL_SECONDS = 5 * 60; // 5 minutes
-  let downloadUrl;
+  // Stream directly from R2 to the client — never buffer the whole file in
+  // memory. This avoids heap exhaustion on large files and means the first
+  // bytes reach the client almost immediately.
+  let bodyStream, contentLength;
   try {
-    downloadUrl = await getPresignedGetUrl(file.path, PRESIGN_TTL_SECONDS);
-  } catch (err) {
-    // Presign failed — clean up storage and surface error.
+    ({ stream: bodyStream, contentLength } = await streamFromStorage(file.path));
+  } catch (storageError) {
+    // DB record is already gone; clean up storage best-effort then re-throw.
     await removeFromStorage(file.path).catch(() => {});
-    throw err;
+    throw storageError;
   }
 
-  // Schedule R2 cleanup one minute after the presigned URL expires so the
-  // object is always removed even if the client never downloads it.
-  setTimeout(
-    () => removeFromStorage(file.path).catch(() => {}),
-    (PRESIGN_TTL_SECONDS + 60) * 1000
-  );
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("X-File-Name", encodeURIComponent(file.originalName));
+  res.setHeader("Content-Type", "application/octet-stream");
+  if (contentLength) {
+    res.setHeader("Content-Length", contentLength);
+  }
 
-  return res.json({
-    downloadUrl,
-    fileName: file.originalName,
-  });
+  // Pipe stream to client. Delete from R2 immediately when done —
+  // whether the transfer completed normally or the client disconnected.
+  // Guard flag prevents the double-delete if both events fire.
+  bodyStream.pipe(res);
+  let r2Cleaned = false;
+  const cleanupR2 = () => {
+    if (r2Cleaned) return;
+    r2Cleaned = true;
+    removeFromStorage(file.path).catch(() => {});
+  };
+  res.on("finish", cleanupR2); // stream fully sent
+  res.on("close", cleanupR2);  // client disconnected early
 }
 
 function getActiveLock(file) {
