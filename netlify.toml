@@ -30,12 +30,11 @@
   status = 200
 
 # ── Security headers ──────────────────────────────────────────────────────────
-# Non-CSP headers are safe to set globally — they don't conflict with Express.
-# CSP is intentionally NOT set here for dynamic routes (/s/*, /file/*) because
-# Express sets a nonce-based CSP for those pages. If netlify.toml also set a
-# CSP for those routes, browsers would apply BOTH (stricter wins), blocking the
-# nonce-validated inline key-capture script and breaking decryption entirely.
-# The /*  CSP below only affects static files served directly from Netlify CDN.
+# CSP is intentionally omitted here — Express sets a nonce-based CSP on every
+# response. If netlify.toml also set a CSP, browsers would enforce BOTH headers
+# simultaneously (stricter wins), blocking the nonce-allowed inline key-capture
+# script on /s/* pages and preventing location.hash from being cleared.
+# All other security headers below are safe to set at the CDN layer.
 
 [[headers]]
   for = "/*"
@@ -47,4 +46,3 @@
     Cross-Origin-Opener-Policy = "same-origin"
     Cross-Origin-Resource-Policy = "same-origin"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://*.supabase.co; img-src 'self' data: https://api.producthunt.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
