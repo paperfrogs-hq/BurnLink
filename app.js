@@ -263,6 +263,7 @@ app.use((req, res, next) => {
   // Fix 3: Prevent cross-origin opener from accessing window.opener (key theft)
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
   res.setHeader("Content-Security-Policy", [
     "default-src 'none'",
     `script-src 'self' 'nonce-${nonce}' https://cloud.umami.is https://challenges.cloudflare.com`,
