@@ -32,8 +32,8 @@
       shareUrl = linkKey ? displayUrl + "#" + linkKey : displayUrl;
     }
 
-    shareLinkEl.href = shareUrl;          // full URL (with key) for copying
-    shareLinkEl.textContent = displayUrl; // clean URL shown in the box
+    shareLinkEl.href = displayUrl;        // clean URL — key is now stored server-side
+    shareLinkEl.textContent = displayUrl;
     linkBoxEl.hidden = false;
   }
 
@@ -265,6 +265,7 @@
         "cf-turnstile-response": turnstileInput ? turnstileInput.value : "",
       };
       if (serverToken) commitPayload.password = serverToken;
+      if (linkKey) commitPayload.linkKey = toBase64Url(linkKey);
 
       var commitRes = await fetch("/api/commit", {
         method: "POST",
@@ -285,10 +286,6 @@
 
       var result = await commitRes.json();
 
-      if (linkKey) {
-        sessionStorage.setItem("__fse_link_key_" + result.id, toBase64Url(linkKey));
-      }
-
       showLinkBox(result.id, result.baseUrl, hasPassword);
       setStatus("Success! Your secure link is ready.");
 
@@ -304,7 +301,7 @@
 
   async function handleCopyLink(event) {
     event.preventDefault();
-    var linkUrl = shareLinkEl.href; // always copy the full URL (includes #key)
+    var linkUrl = shareLinkEl.href; // clean URL — key is now stored server-side
 
     try {
       await navigator.clipboard.writeText(linkUrl);

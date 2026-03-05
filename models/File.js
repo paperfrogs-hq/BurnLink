@@ -14,10 +14,11 @@ function mapRow(row) {
     lockedUntil: row.locked_until || null,
     mode: row.mode || "download",
     expiresAt: row.expires_at || null,
+    linkKey: row.link_key || null,
   };
 }
 
-async function createFile({ path, originalName, password, mode = "download" }) {
+async function createFile({ path, originalName, password, mode = "download", linkKey = null }) {
   const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
   const expiresAt = mode === "view-once" ? new Date(Date.now() + 60000).toISOString() : null;
 
@@ -31,6 +32,7 @@ async function createFile({ path, originalName, password, mode = "download" }) {
       locked_until: null,
       mode,
       expires_at: expiresAt,
+      link_key: linkKey || null,
     })
     .select("*")
     .single();

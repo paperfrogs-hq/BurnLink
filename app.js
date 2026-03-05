@@ -470,6 +470,7 @@ app.get("/health", async (req, res) => {
 
 // Validates storagePath format to prevent path traversal on commit
 const STORAGE_PATH_RE = /^\d{4}-\d{2}-\d{2}\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}-[\w.\-]+$/i;
+const LINK_KEY_RE = /^[A-Za-z0-9_-]{43,88}$/; // base64url-encoded AES-256 key (32 bytes = 43 chars)
 
 // Step 1 — browser asks for a signed PUT URL
 // Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
@@ -492,7 +493,7 @@ app.get("/api/presign", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
 // Step 2 — browser calls this after it finishes the direct PUT to R2
 // Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
 app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
-  const { storagePath, originalName, mode: rawMode, password: rawPassword, "cf-turnstile-response": turnstileToken } = req.body;
+  const { storagePath, originalName, mode: rawMode, password: rawPassword, linkKey: rawLinkKey, "cf-turnstile-response": turnstileToken } = req.body;
 
   const fwdRaw = (req.headers["x-forwarded-for"] || "").trim();
   const userIp = fwdRaw.split(",")[0].trim() || req.socket?.remoteAddress;
@@ -503,6 +504,10 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
 
   if (!storagePath || !STORAGE_PATH_RE.test(storagePath)) {
     return res.status(400).json({ error: "Invalid storage path." });
+  }
+
+  if (rawLinkKey && !LINK_KEY_RE.test(rawLinkKey)) {
+    return res.status(400).json({ error: "Invalid link key." });
   }
 
   const originalNameClean = (originalName || "file").toString().trim().slice(0, 255);
@@ -533,6 +538,7 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
       originalName: originalNameClean,
       password: rawPassword?.trim() || undefined,
       mode,
+      linkKey: rawLinkKey || null,
     });
 
     const shareBaseUrl = canonicalUrl
@@ -648,6 +654,7 @@ app.get("/s/:id", async (req, res) => {
       fileId: file.id,
       requiresPassword: Boolean(file.password),
       mode: file.mode || "download",
+      linkKey: file.linkKey || null,
     });
   } catch (error) {
     return res.status(400).render("not-found");
