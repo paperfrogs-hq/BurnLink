@@ -61,6 +61,31 @@ function makeCleanupToken(storagePath) {
   return crypto.createHmac("sha256", CLEANUP_SECRET).update(storagePath).digest("hex");
 }
 
+// ── Fix 6: Preview/link-preview bot detection ─────────────────────────────
+// Known bots that auto-fetch shared URLs (link previews). Receiving one of
+// these must NOT trigger a burn — return a neutral preview page instead.
+const PREVIEW_BOT_AGENTS = [
+  'WhatsApp', 'Slackbot', 'TelegramBot', 'facebookexternalhit',
+  'Twitterbot', 'LinkedInBot', 'Discordbot', 'Iframely',
+  'bot', 'crawl', 'spider', 'preview', 'fetch',
+];
+
+function isPreviewBot(userAgent = '') {
+  const ua = userAgent.toLowerCase();
+  return PREVIEW_BOT_AGENTS.some(bot => ua.includes(bot.toLowerCase()));
+}
+
+const PREVIEW_RESPONSE_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta property="og:title" content="BurnLink \u2014 Secure File">
+  <meta property="og:description" content="A secure, encrypted one-time file. Open the link to decrypt and download.">
+  <meta name="robots" content="noindex,nofollow">
+</head>
+<body></body>
+</html>`;
+
+
 async function verifyTurnstile(token, remoteip) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) return true; // skip if env var not configured
@@ -103,23 +128,17 @@ function buildStoragePath(originalName) {
 // uploadToStorage, downloadFromStorage, removeFromStorage are imported from lib/r2.js
 
 async function sendOneTimeEncryptedFile(res, file) {
-  // Check if view-once file has expired
-  if (file.mode === "view-once" && file.expiresAt) {
-    const expiresAt = new Date(file.expiresAt);
-    if (!isNaN(expiresAt) && expiresAt <= new Date()) {
-      await File.deleteById(file.id);
-      await removeFromStorage(file.path);
-      return res.status(410).render("not-found");
-    }
-  }
-
-  // Atomically claim this file by deleting the DB record FIRST.
-  // This prevents a race condition where two concurrent requests both
-  // retrieve and serve the same encrypted payload.
-  // The first caller gets deleted=true and proceeds; any concurrent
-  // caller gets deleted=false and receives 410 without touching storage.
-  const deleted = await File.deleteById(file.id);
-  if (!deleted) {
+  // Fix 1 — Atomic burn via Supabase RPC.
+  // The burn_file() function does the expiry check AND the DELETE in a single
+  // SQL statement, eliminating the TOCTOU window that a separate
+  // SELECT-then-DELETE pattern has. Only one concurrent caller wins;
+  // any race loser (or an already-burned / expired link) gets 410.
+  // Never reveal *why* the link is unavailable — all failure cases return the
+  // same status and body.
+  const { data: burnData, error: burnError } = await supabase.rpc('burn_file', {
+    file_id: file.id,
+  });
+  if (burnError || !burnData || burnData.length === 0) {
     return res.status(410).render("not-found");
   }
 
@@ -238,9 +257,12 @@ app.use((req, res, next) => {
   res.locals.turnstileSiteKey = TURNSTILE_SITE_KEY;
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
   res.setHeader("X-XSS-Protection", "0"); // disabled — CSP is the correct defence
+  // Fix 3: Prevent cross-origin opener from accessing window.opener (key theft)
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   res.setHeader("Content-Security-Policy", [
     "default-src 'none'",
     `script-src 'self' 'nonce-${nonce}' https://cloud.umami.is https://challenges.cloudflare.com`,
@@ -450,7 +472,8 @@ app.get("/health", async (req, res) => {
 const STORAGE_PATH_RE = /^\d{4}-\d{2}-\d{2}\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}-[\w.\-]+$/i;
 
 // Step 1 — browser asks for a signed PUT URL
-app.get("/api/presign", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
+// Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
+app.get("/api/presign", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
   try {
     const filesize = Number(req.query.filesize || 0);
     if (filesize > MAX_UPLOAD_BYTES) {
@@ -467,7 +490,8 @@ app.get("/api/presign", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
 });
 
 // Step 2 — browser calls this after it finishes the direct PUT to R2
-app.post("/api/commit", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
+// Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
+app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
   const { storagePath, originalName, mode: rawMode, password: rawPassword, "cf-turnstile-response": turnstileToken } = req.body;
 
   const fwdRaw = (req.headers["x-forwarded-for"] || "").trim();
@@ -548,7 +572,8 @@ app.post("/api/r2-cleanup", rateLimit(60, 60 * 1000), async (req, res) => {
   return res.json({ ok: true });
 });
 
-app.post("/api/upload", rateLimit(10, 10 * 60 * 1000), upload.single("file"), async (req, res) => {
+// Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
+app.post("/api/upload", dbRateLimit(10, 10 * 60 * 1000), upload.single("file"), async (req, res) => {
   let storagePath = null;
 
   try {
@@ -630,6 +655,11 @@ app.get("/s/:id", async (req, res) => {
 });
 
 app.get("/s/:id/raw", rateLimit(15, 60 * 1000), async (req, res) => {
+  // Fix 6: Known link-preview bots must not trigger a burn.
+  // They receive a neutral HTML preview and the file is left intact.
+  if (isPreviewBot(req.headers["user-agent"] || "")) {
+    return res.status(200).set("Content-Type", "text/html").send(PREVIEW_RESPONSE_HTML);
+  }
   try {
     const file = await File.findById(req.params.id);
     if (!file) return res.status(404).render("not-found");
@@ -700,6 +730,10 @@ app.get("/file/:id", async (req, res) => {
 });
 
 app.get("/file/:id/raw", rateLimit(15, 60 * 1000), async (req, res) => {
+  // Fix 6: Same bot guard as /s/:id/raw — never burn on a preview-bot GET.
+  if (isPreviewBot(req.headers["user-agent"] || "")) {
+    return res.status(200).set("Content-Type", "text/html").send(PREVIEW_RESPONSE_HTML);
+  }
   try {
     const file = await File.findById(req.params.id);
 

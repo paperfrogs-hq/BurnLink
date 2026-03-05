@@ -77,7 +77,10 @@
   </p>
 
   <script nonce="<%= cspNonce %>">
-    var RETURN_TO = "<%- JSON.stringify(returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/').slice(1,-1) %>";
+    // Fix 8: Use JSON.stringify for the full JS literal (no manual slice) and
+    // replace < / > with unicode escapes so </script> cannot break out of this
+    // script tag — a genuine XSS vector when returnTo contains user input.
+    var RETURN_TO = <%- JSON.stringify(returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/').replace(/</g, '\\u003c').replace(/>/g, '\\u003e') %>;
 
     function setStatus(msg, isError) {
       var el = document.getElementById("status");

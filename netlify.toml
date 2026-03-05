@@ -28,3 +28,30 @@
   from = "/*"
   to = "/.netlify/functions/app/:splat"
   status = 200
+
+# ── Security headers ──────────────────────────────────────────────────────────
+# Applied by Netlify's CDN to static assets. Dynamic function responses use
+# the Express middleware in app.js (which also sets nonce-based CSP).
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Resource-Policy = "same-origin"
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://*.supabase.co; img-src 'self' data: https://api.producthunt.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+
+# Stricter CSP for the decrypt/download pages — no external scripts allowed
+[[headers]]
+  for = "/s/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; connect-src 'self' https://*.supabase.co; img-src 'self' data:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+
+[[headers]]
+  for = "/file/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; connect-src 'self' https://*.supabase.co; img-src 'self' data:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
