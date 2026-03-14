@@ -76,4 +76,4 @@ For issues or questions, [open an issue](https://github.com/Joy-Majumder/BurnLin
 
 ---
 
-BurnLink is a product of [Paperfrogs Lab](https://paperfrogs.dev) — an infrastructure-first studio building research-driven, production-ready tools.
+BurnLink is a product of [Paperfrogs/Open](https://paperfrogs.dev) — an infrastructure-first studio building research-driven, production-ready tools.
