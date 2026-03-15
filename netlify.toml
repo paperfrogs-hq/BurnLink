@@ -7,6 +7,6 @@ functions = "netlify/functions"
 command = "npm run dev"
 
 [[redirects]]
-from = "/api/*"
+from = "/*"
 to = "/.netlify/functions/app"
 status = 200
