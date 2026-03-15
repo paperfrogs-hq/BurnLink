@@ -49,7 +49,51 @@
     main { padding: 0 0 5rem; min-height: calc(100vh - 140px); }
 
     /* ── Hero top ── */
-    .hero-top { padding: 5rem 0 4rem; border-bottom: 1px solid #141414; text-align: center; }
+    .hero-top { padding: 3.9rem 0 4rem; border-bottom: 1px solid #141414; text-align: center; }
+    .launch-slider {
+      width: 100vw; overflow: hidden;
+      background: linear-gradient(90deg, #0c0c0c 0%, #101010 50%, #0c0c0c 100%);
+      margin: -0.9rem 0 3.6rem; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw);
+      position: relative;
+    }
+    .launch-slider-track {
+      display: flex; align-items: center; width: max-content; white-space: nowrap;
+      padding: 0.75rem 0; animation: launchTicker 22s linear infinite;
+      will-change: transform;
+      opacity: 0.72;
+    }
+    .launch-slide-item {
+      display: inline-flex; align-items: center; gap: 1rem; color: #d6d6d6;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase;
+      padding: 0 1rem;
+    }
+    .launch-slide-copy { color: #d8d8d8; }
+    .launch-slide-sep {
+      color: #4a4a4a; font-size: 0.72rem; letter-spacing: 0; user-select: none;
+    }
+    .launch-slide-item .dot {
+      width: 5px; height: 5px; background: #eb583d; flex-shrink: 0;
+    }
+    .launch-slide-link {
+      color: #eb583d; text-decoration: none; border: 1px solid #2b2b2b; background: #141414;
+      padding: 0.32rem 0.7rem; font-size: 0.66rem; letter-spacing: 0.08em; transition: all 0.2s ease;
+    }
+    .launch-slide-link:hover {
+      color: #fff; border-color: #eb583d; background: #1a1a1a;
+    }
+    .launch-slider::before,
+    .launch-slider::after {
+      content: ""; position: absolute; top: 0; bottom: 0; width: 240px; z-index: 2; pointer-events: none;
+    }
+    .launch-slider::before { left: 0; background: linear-gradient(90deg, #0a0a0a 0%, rgba(10,10,10,0.96) 42%, rgba(10,10,10,0.72) 68%, rgba(10,10,10,0.25) 86%, transparent 100%); }
+    .launch-slider::after { right: 0; background: linear-gradient(270deg, #0a0a0a 0%, rgba(10,10,10,0.96) 42%, rgba(10,10,10,0.72) 68%, rgba(10,10,10,0.25) 86%, transparent 100%); }
+    @keyframes launchTicker {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .launch-slider-track { animation: none; }
+    }
     .hero-top h1 {
       font-size: clamp(2.8rem, 6vw, 5.5rem); font-weight: 800; line-height: 0.95;
       letter-spacing: -0.04em; color: #fff; margin-bottom: 1.5rem;
@@ -103,6 +147,11 @@
       .hero { grid-template-columns: 1fr; gap: 3rem; padding-top: 3rem; }
       .hero-content p { max-width: 100%; }
       .upload-section { padding: 1.5rem; }
+      .hero-top { padding-top: 3rem; }
+      .launch-slider { margin-top: -0.5rem; margin-bottom: 2.4rem; }
+      .launch-slider-track { padding: 0.6rem 0; }
+      .launch-slide-item { font-size: 0.66rem; letter-spacing: 0.08em; padding: 0 0.75rem; }
+      .launch-slide-link { font-size: 0.62rem; padding: 0.28rem 0.55rem; }
       input[type="file"], input[type="password"] { font-size: 16px; }
       .link-actions { flex-direction: column; }
       #copy-link-btn { width: 100%; }
@@ -134,6 +183,50 @@
     <!-- Hero headline -->
     <div class="hero-top">
       <div class="container">
+        <div class="launch-slider" aria-label="BurnLink Product Hunt launch">
+          <div class="launch-slider-track">
+            <div class="launch-slide-item">
+              <span class="dot" aria-hidden="true"></span>
+              <span class="launch-slide-copy">BurnLink is now live on Product Hunt</span>
+              <span class="launch-slide-sep" aria-hidden="true">•</span>
+              <span class="launch-slide-copy">Encrypted file sharing with one-time burn links</span>
+              <span class="launch-slide-sep" aria-hidden="true">•</span>
+              <a class="launch-slide-link" href="https://www.producthunt.com/products/burnlink?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-burnlink-2" target="_blank" rel="noopener noreferrer">
+                Open on Product Hunt
+              </a>
+            </div>
+            <div class="launch-slide-item">
+              <span class="dot" aria-hidden="true"></span>
+              <span class="launch-slide-copy">Support the launch with your vote and feedback</span>
+              <span class="launch-slide-sep" aria-hidden="true">•</span>
+              <span class="launch-slide-copy">Privacy-first. Browser-encrypted. Ephemeral by design</span>
+              <span class="launch-slide-sep" aria-hidden="true">•</span>
+              <a class="launch-slide-link" href="https://www.producthunt.com/products/burnlink?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-burnlink-2" target="_blank" rel="noopener noreferrer">
+                Visit Product Hunt
+              </a>
+            </div>
+            <div class="launch-slide-item" aria-hidden="true">
+              <span class="dot"></span>
+              <span class="launch-slide-copy">BurnLink is now live on Product Hunt</span>
+              <span class="launch-slide-sep">•</span>
+              <span class="launch-slide-copy">Encrypted file sharing with one-time burn links</span>
+              <span class="launch-slide-sep">•</span>
+              <a class="launch-slide-link" href="https://www.producthunt.com/products/burnlink?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-burnlink-2" target="_blank" rel="noopener noreferrer" tabindex="-1">
+                Open on Product Hunt
+              </a>
+            </div>
+            <div class="launch-slide-item" aria-hidden="true">
+              <span class="dot"></span>
+              <span class="launch-slide-copy">Support the launch with your vote and feedback</span>
+              <span class="launch-slide-sep">•</span>
+              <span class="launch-slide-copy">Privacy-first. Browser-encrypted. Ephemeral by design</span>
+              <span class="launch-slide-sep">•</span>
+              <a class="launch-slide-link" href="https://www.producthunt.com/products/burnlink?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-burnlink-2" target="_blank" rel="noopener noreferrer" tabindex="-1">
+                Visit Product Hunt
+              </a>
+            </div>
+          </div>
+        </div>
         <h1>The file link that<br><em>burns itself.</em></h1>
         <p>Encrypted in your browser. Delivered once. Permanently deleted on access. No accounts, no logs, no trace.</p>
       </div>
@@ -213,6 +306,7 @@
         <div class="footer-section">
           <h3>Developer</h3>
           <a href="https://github.com/Joy-Majumder" target="_blank" rel="noopener noreferrer">Joy G. Majumdar</a>
+          <a href="https://github.com/niloymajumder" target="_blank" rel="noopener noreferrer">Niloy Majumder</a>
           <a href="https://github.com/Joy-Majumder/BurnLink" target="_blank" rel="noopener noreferrer">GitHub</a>
         </div>
         <div class="footer-section">
@@ -223,9 +317,8 @@
         </div>
       </div>
       <div class="footer-bottom" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
-        <p>&copy; 2026 BurnLink &mdash; A product of <a href="https://paperfrogs.dev" target="_blank" rel="noopener noreferrer" style="color:#555;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#555'">Paperfrogs Lab</a></p>
+        <p>&copy; 2026 BurnLink &mdash; A product of <a href="https://paperfrogs.dev" target="_blank" rel="noopener noreferrer" style="color:#555;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#555'">Paperfrogs/Open</a></p>
         <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
-          <a href="https://www.producthunt.com/products/burnlink?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-burnlink-2" target="_blank" rel="noopener noreferrer"><img alt="BurnLink - Share files. Encrypted. Ephemeral. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1090837&amp;theme=dark&amp;t=1772737860949"></a>
           <a href="https://github.com/Joy-Majumder/BurnLink" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:0.4rem;color:#555;text-decoration:none;font-size:0.78rem;transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#555'">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
             Open source
