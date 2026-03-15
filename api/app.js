@@ -1,2 +1,6 @@
 const app = require('../app');
-module.exports = (req, res) => app(req, res);
+
+// Vercel serverless handler for Express app
+module.exports = (req, res) => {
+  app(req, res);
+};
