@@ -5,6 +5,11 @@ functions = "netlify/functions"
 
 [functions]
   node_bundler = "zisi"
+  
+[[functions]]
+name = "app"
+node_bundler = "zisi"
+included_files = ["node_modules/**"]
 
 [dev]
 command = "npm run dev"
