@@ -33,7 +33,7 @@ BurnLink is an open-source, privacy-first file sharing platform with browser-sid
 | Templating | EJS |
 | File Storage | Cloudflare R2 (S3-compatible) |
 | Database / Metadata | Supabase (PostgreSQL) |
-| Deployment | Netlify (Serverless Functions) |
+| Deployment | Vercel (Serverless Functions) |
 | Encryption | Web Crypto API (AES-256-GCM, PBKDF2) |
 
 ---

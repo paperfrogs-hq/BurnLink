@@ -147,7 +147,7 @@ async function sendOneTimeEncryptedFile(res, file) {
   }
 
   // Return a short-lived presigned GET URL so the browser downloads directly
-  // from R2. The Netlify function only handles this tiny JSON response
+  // from R2. The Vercel function only handles this tiny JSON response
   // (~500ms) regardless of file size — no more 26s timeout kills.
   // A signed cleanup token lets the client tell us when to delete the R2 object.
   const PRESIGN_TTL = 5 * 60; // 5 minutes

@@ -273,7 +273,7 @@
       var presignData = await presignRes.json();
 
       // Step 2 — encrypt the file (already done above)
-      // Step 3 — PUT encrypted bytes directly to R2 (bypasses Netlify size cap)
+      // Step 3 — PUT encrypted bytes directly to R2 (bypasses Vercel size cap)
       // No Content-Type header here — keeps this a CORS simple request (no preflight)
       setStatus("Uploading encrypted file...");
       var putRes;
