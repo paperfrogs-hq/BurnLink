@@ -3,10 +3,9 @@ command = "npm install"
 publish = "public"
 functions = "netlify/functions"
 
-[[functions]]
-name = "app"
+[functions]
 node_bundler = "zisi"
-included_files = ["node_modules/**"]
+external_node_modules = ["ejs"]
 
 [dev]
 command = "npm run dev"
