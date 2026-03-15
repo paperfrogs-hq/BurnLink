@@ -1,8 +1,1 @@
-require("dotenv").config();
-
-const serverless = require("serverless-http");
-const app = require("../../app");
-
-module.exports.handler = serverless(app, {
-  binary: ["*/*"],
-});
+// Netlify function removed. Migrated to Vercel API route in api/app.js.
