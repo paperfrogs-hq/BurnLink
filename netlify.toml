@@ -3,10 +3,6 @@ command = "npm install"
 publish = "public"
 functions = "netlify/functions"
 
-[functions]
-node_bundler = "zisi"
-external_node_modules = ["ejs"]
-
 [dev]
 command = "npm run dev"
 
