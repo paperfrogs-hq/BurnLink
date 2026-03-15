@@ -369,28 +369,10 @@ app.use((req, res, next) => {
 });
 
 // ── Turnstile gateway — verify humans before accessing any page ────────────
-app.use((req, res, next) => {
-  // Exempt: gateway page, verify endpoint, health, well-known, static assets
-  const exempt = ["/gateway", "/api/gateway-verify", "/health", "/.well-known"];
-  if (exempt.some(p => req.path === p || req.path.startsWith(p + "/"))) return next();
-  if (/\.\w{1,6}$/.test(req.path)) return next(); // static files
-
-  const raw = req.headers.cookie || "";
-  const cookieEntry = raw.split(";").map(s => s.trim()).find(s => s.startsWith(GATEWAY_COOKIE + "="));
-  const cookieVal = cookieEntry ? cookieEntry.slice(GATEWAY_COOKIE.length + 1) : null;
-
-  if (isGatewayCookieValid(cookieVal)) return next();
-
-  // Validate and sanitize next param to prevent open redirect
-  const next_ = encodeURIComponent(req.originalUrl.startsWith("/") ? req.originalUrl : "/");
-  return res.redirect(`/gateway?next=${next_}`);
-});
 
 app.get("/gateway", (req, res) => {
-  const next_ = (req.query.next || "/").toString();
-  // Only allow relative paths
-  const returnTo = next_.startsWith("/") && !next_.startsWith("//") ? next_ : "/";
-  res.render("gateway", { returnTo, cspNonce: res.locals.cspNonce, turnstileSiteKey: res.locals.turnstileSiteKey });
+  // Gateway view removed. Route disabled.
+  res.status(404).send("Gateway page has been removed.");
 });
 
 app.post("/api/gateway-verify", async (req, res) => {
