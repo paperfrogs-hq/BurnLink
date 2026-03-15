@@ -266,7 +266,7 @@ app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
   res.setHeader("Content-Security-Policy", [
     "default-src 'none'",
-    `script-src 'self' 'nonce-${nonce}' https://cloud.umami.is https://challenges.cloudflare.com`,
+    `script-src 'self' 'nonce-${nonce}' https://cloud.umami.is https://challenges.cloudflare.com https://static.cloudflareinsights.com`,
     "style-src 'unsafe-inline'",
     "img-src 'self' blob: data: https://api.producthunt.com",
     "media-src 'self' blob:",
