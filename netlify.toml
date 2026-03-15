@@ -3,9 +3,6 @@ command = "npm install"
 publish = "public"
 functions = "netlify/functions"
 
-[functions]
-  node_bundler = "zisi"
-  
 [[functions]]
 name = "app"
 node_bundler = "zisi"
