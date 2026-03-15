@@ -3,6 +3,11 @@ command = "npm install"
 publish = "public"
 functions = "netlify/functions"
 
+[functions]
+node_bundler = "esbuild"
+external_node_modules = ["ejs"]
+included_files = ["views/**", "public/**"]
+
 [dev]
 command = "npm run dev"
 
