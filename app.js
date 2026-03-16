@@ -297,7 +297,7 @@ app.use((req, res, next) => {
     "img-src 'self' blob: data: https://api.producthunt.com",
     "media-src 'self' blob:",
     "font-src 'self' https://fonts.gstatic.com",
-    `connect-src 'self' https://cloud.umami.is https://challenges.cloudflare.com${r2CspOrigin ? " " + r2CspOrigin : ""}`,
+    `connect-src 'self' https://cloud.umami.is https://api-gateway.umami.dev https://challenges.cloudflare.com${r2CspOrigin ? " " + r2CspOrigin : ""}`,
     "frame-src blob: https://challenges.cloudflare.com",
     "form-action 'self'",
     "base-uri 'self'",
