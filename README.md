@@ -60,12 +60,6 @@ BurnLink is an open-source, privacy-first file sharing platform with browser-sid
 
 ---
 
-## License
-
-MIT © [Joy G. Majumdar](https://github.com/Joy-Majumder)
-
----
-
 ## Contributing
 
 Contributions are welcome. Feel free to open issues and pull requests.
