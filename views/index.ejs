@@ -182,40 +182,44 @@
     .toast.hide { animation: slideOut 0.3s ease forwards; }
     .password-input-group {
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      gap: 0.5rem;
       width: 100%;
-      border: 1px solid #2a2a2a;
-      background: #0f0f0f;
-      border-radius: 2px;
     }
     .password-input-group input {
-      flex: 1;
-      border: none;
-      background: transparent;
-      padding: 0.75rem 1rem;
+      border: 1px solid #222;
+      background: #111;
+      padding: 0.85rem 1rem;
       color: #ccc;
       font-size: 0.95rem;
+      min-height: 44px;
+      -webkit-appearance: none;
+      appearance: none;
+      border-radius: 0;
+      width: 100%;
     }
     .password-input-group input:focus {
       outline: none;
+      border-color: #eb583d;
     }
     .password-toggle {
       padding: 0.5rem 0.75rem;
-      margin-right: 0.25rem;
       background: transparent;
       color: #bbb;
-      border: none;
+      border: 1px solid #222;
       font-size: 0.62rem;
       font-weight: 600;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       cursor: pointer;
       white-space: nowrap;
-      flex-shrink: 0;
+      min-height: 36px;
+      width: 100%;
     }
     .password-toggle:hover {
       color: #fff;
       background: rgba(235, 88, 61, 0.1);
+      border-color: #eb583d;
     }
     .password-toggle:focus {
       outline: 2px solid #eb583d;
