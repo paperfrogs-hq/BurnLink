@@ -5,6 +5,8 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
+const QRCode = require("qrcode");
+const { Jimp } = require("jimp");
 const File = require("./models/File");
 const { dbRateLimit } = require("./models/RateLimit");
 const supabase = require("./lib/supabase");
@@ -139,6 +141,15 @@ function buildStoragePath(originalName) {
 // uploadToStorage, downloadFromStorage, removeFromStorage are imported from lib/r2.js
 
 async function sendOneTimeEncryptedFile(res, file) {
+  // For view-once mode, set expiry on first access (not on creation)
+  if (file.mode === "view-once" && !file.expiresAt) {
+    try {
+      await File.setExpiryOnFirstAccess(file.id);
+    } catch (err) {
+      console.error("Failed to set expiry on first access:", err.message);
+    }
+  }
+
   // Fix 1 — Atomic burn via Supabase RPC.
   // The burn_file() function does the expiry check AND the DELETE in a single
   // SQL statement, eliminating the TOCTOU window that a separate
@@ -319,7 +330,7 @@ app.use((req, res, next) => {
   res.setHeader("Content-Security-Policy", [
     "default-src 'none'",
     `script-src 'self' 'nonce-${nonce}' https://cloud.umami.is https://challenges.cloudflare.com https://static.cloudflareinsights.com`,
-    "style-src 'unsafe-inline' https://fonts.googleapis.com",
+    "style-src 'unsafe-inline' https://fonts.googleapis.com https://challenges.cloudflare.com",
     "img-src 'self' blob: data: https://api.producthunt.com",
     "media-src 'self' blob:",
     "font-src 'self' https://fonts.gstatic.com",
@@ -545,6 +556,67 @@ app.get("/health", async (req, res) => {
   }
 });
 
+// ── QR Code generation endpoint ────────────────────────────────────────────
+app.get("/api/qr/:id", rateLimit(30, 60 * 1000), async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id);
+    if (!file) {
+      return res.status(404).json({ error: "File not found." });
+    }
+
+    const shareBaseUrl = getShareBaseUrl(req);
+    const shareUrl = `${shareBaseUrl}/s/${req.params.id}`;
+
+    // Generate QR code as buffer
+    const qrBuffer = await QRCode.toBuffer(shareUrl, {
+      errorCorrectionLevel: "H",
+      type: "image/png",
+      width: 300,
+      margin: 2,
+      color: {
+        dark: "#000000",
+        light: "#ffffff",
+      },
+    });
+
+    // Load QR code image with Jimp
+    let qrImage = await Jimp.read(qrBuffer);
+
+    // Try to load and overlay logo
+    try {
+      const logoPath = path.join(path.dirname(__filename), "public", "logo1.png");
+      if (fs.existsSync(logoPath)) {
+        const logo = await Jimp.read(logoPath);
+
+        // Calculate logo size (about 25% of QR code)
+        const qrSize = qrImage.width;
+        const logoSize = Math.floor(qrSize * 0.25);
+
+        // Resize logo
+        logo.resize({ w: logoSize, h: logoSize });
+
+        // Calculate center position
+        const logoX = Math.floor((qrSize - logoSize) / 2);
+        const logoY = Math.floor((qrSize - logoSize) / 2);
+
+        // Composite logo directly on QR (transparent background)
+        qrImage.composite(logo, logoX, logoY);
+      }
+    } catch (logoErr) {
+      console.warn("Could not overlay logo:", logoErr.message);
+      // Continue without logo if there's an error
+    }
+
+    // Convert to data URL
+    const qrDataUrl = await qrImage.getBase64("image/png");
+
+    return res.json({ qrDataUrl, shareUrl });
+  } catch (error) {
+    console.error("QR generation error:", error.message);
+    return res.status(500).json({ error: "Failed to generate QR code." });
+  }
+});
+
 // ── Phase 2: presign + commit (direct browser → R2 upload, no Netlify 6MB cap) ──
 
 // Validates storagePath format to prevent path traversal on commit
@@ -572,7 +644,18 @@ app.get("/api/presign", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
 // Step 2 — browser calls this after it finishes the direct PUT to R2
 // Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
 app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
-  const { storagePath, originalName, mode: rawMode, password: rawPassword, linkKey: rawLinkKey } = req.body;
+  const { storagePath, originalName, mode: rawMode, password: rawPassword, linkKey: rawLinkKey, "cf-turnstile-response": turnstileToken } = req.body;
+
+  // Validate Turnstile token if configured
+  if (process.env.TURNSTILE_SECRET_KEY) {
+    if (!turnstileToken) {
+      return res.status(400).json({ error: "Bot verification failed. Please try again." });
+    }
+    const turnstileOk = await verifyTurnstile(turnstileToken, req.socket?.remoteAddress);
+    if (!turnstileOk) {
+      return res.status(403).json({ error: "Bot verification failed. Please try again." });
+    }
+  }
 
   if (!storagePath || !STORAGE_PATH_RE.test(storagePath)) {
     return res.status(400).json({ error: "Invalid storage path." });
@@ -657,6 +740,18 @@ app.post("/api/upload", dbRateLimit(10, 10 * 60 * 1000), upload.single("file"), 
   let storagePath = null;
 
   try {
+    // Validate Turnstile token if configured
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      const turnstileToken = (req.body["cf-turnstile-response"] || "").toString();
+      if (!turnstileToken) {
+        return res.status(400).json({ error: "Bot verification failed. Please try again." });
+      }
+      const turnstileOk = await verifyTurnstile(turnstileToken, req.socket?.remoteAddress);
+      if (!turnstileOk) {
+        return res.status(403).json({ error: "Bot verification failed. Please try again." });
+      }
+    }
+
     if (!req.file) {
       return res.status(400).json({
         error: "Please choose a file to upload.",

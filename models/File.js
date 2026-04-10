@@ -20,7 +20,8 @@ function mapRow(row) {
 
 async function createFile({ path, originalName, password, mode = "download", linkKey = null }) {
   const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
-  const expiresAt = mode === "view-once" ? new Date(Date.now() + 60000).toISOString() : null;
+  // Don't set expiry on creation — it's set on first access instead
+  const expiresAt = null;
 
   const { data, error } = await supabase
     .from(filesTable)
@@ -42,6 +43,19 @@ async function createFile({ path, originalName, password, mode = "download", lin
   }
 
   return mapRow(data);
+}
+
+async function setExpiryOnFirstAccess(id) {
+  const expiresAt = new Date(Date.now() + 60000).toISOString();
+  const { error } = await supabase
+    .from(filesTable)
+    .update({ expires_at: expiresAt })
+    .eq("id", id)
+    .is("expires_at", null);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 async function findFileById(id) {
@@ -97,4 +111,5 @@ module.exports = {
   deleteById: deleteFileById,
   updateLockState,
   comparePassword,
+  setExpiryOnFirstAccess,
 };
