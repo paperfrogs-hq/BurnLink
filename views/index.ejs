@@ -140,17 +140,87 @@
       visibility: hidden;
       pointer-events: none;
       position: absolute;
-      right: 0;
     }
-    .password-input-wrap { position: relative; }
-    .password-input-wrap input { padding-right: 5.25rem; }
+    .drag-drop-zone {
+      border: 2px dashed #2a2a2a; padding: 2rem; text-align: center; cursor: pointer;
+      transition: all 0.3s ease; border-radius: 2px; background: #0f0f0f;
+      display: block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: #666; margin-bottom: 0; margin-top: 0.5rem;
+    }
+    .drag-drop-zone:hover {
+      border-color: #eb583d; background: #1a0a05;
+    }
+    .drag-drop-zone.dragover {
+      border-color: #ff8c42; background: #1a0a05;
+    }
+    .drag-drop-icon { font-size: 2rem; margin-bottom: 0.5rem; display: block; }
+    .drag-drop-text { font-size: 0.85rem; color: #888; margin-bottom: 0.25rem; display: block; }
+    .drag-drop-hint { font-size: 0.75rem; color: #555; display: block; }
+    .progress-container { display: none; gap: 1rem; flex-direction: column; }
+    .progress-container.active { display: flex; }
+    .progress-bar-track { background: #1a1a1a; height: 6px; border-radius: 3px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #eb583d, #ff8c42); border-radius: 3px; width: 0%; transition: width 0.3s ease; }
+    .progress-text { font-size: 0.75rem; color: #666; text-align: right; }
+    .toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 1001; }
+    .toast {
+      background: #1a1a1a; border: 1px solid #2a2a2a; padding: 1rem 1.25rem;
+      border-radius: 2px; color: #aaa; font-size: 0.85rem;
+      margin-bottom: 0.75rem; animation: slideIn 0.3s ease;
+      min-width: 250px; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .toast.success { border-color: #28a745; color: #28df54; }
+    .toast.error { border-color: #dc3545; color: #ff6b6b; }
+    .toast.info { border-color: #eb583d; color: #ff8c42; }
+    @keyframes slideIn {
+      from { transform: translateX(400px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(400px); opacity: 0; }
+    }
+    .toast.hide { animation: slideOut 0.3s ease forwards; }
+    .password-input-group {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      border: 1px solid #2a2a2a;
+      background: #0f0f0f;
+      border-radius: 2px;
+    }
+    .password-input-group input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 0.75rem 1rem;
+      color: #ccc;
+      font-size: 0.95rem;
+    }
+    .password-input-group input:focus {
+      outline: none;
+    }
     .password-toggle {
-      position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%);
-      width: auto; min-height: 32px; padding: 0.35rem 0.65rem;
-      background: #1a1a1a; color: #bbb; border: 1px solid #2a2a2a;
-      font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 0.5rem 0.75rem;
+      margin-right: 0.25rem;
+      background: transparent;
+      color: #bbb;
+      border: none;
+      font-size: 0.62rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
-    .password-toggle:hover:not(:disabled) { opacity: 1; color: #fff; border-color: #3a3a3a; }
+    .password-toggle:hover {
+      color: #fff;
+      background: rgba(235, 88, 61, 0.1);
+    }
+    .password-toggle:focus {
+      outline: 2px solid #eb583d;
+      outline-offset: -2px;
+    }
     button {
       background: #eb583d; color: #000; border: none; padding: 0.9rem 1.5rem;
       font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
@@ -164,8 +234,21 @@
     #share-link { display: block; word-break: break-all; padding: 0.85rem 1rem; background: #111; border: 1px solid #222; margin-bottom: 1rem; color: #eb583d; text-decoration: none; font-family: "Monaco", "Courier New", monospace; font-size: 0.8rem; }
     .link-actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
     #copy-link-btn { width: auto; padding: 0.7rem 1.25rem; }
+    #qr-btn { width: auto; padding: 0.7rem 1.25rem; }
     .status { font-size: 0.8rem; color: #eb583d; font-weight: 500; }
     .status.error { color: #ff6b6b; }
+    .qr-modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    .qr-modal.active { display: flex; }
+    .qr-modal-content { background: linear-gradient(135deg, #1f1f1f 0%, #0f0f0f 100%); border: 1px solid #2a2a2a; padding: 2.5rem; max-width: 420px; position: relative; border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 1px rgba(235, 88, 61, 0.3); }
+    .qr-modal-close { position: absolute; top: 1.5rem; right: 1.5rem; background: rgba(235, 88, 61, 0.1); border: 1px solid rgba(235, 88, 61, 0.3); color: #bbb; font-size: 1.5rem; cursor: pointer; width: 36px; height: 36px; padding: 0; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+    .qr-modal-close:hover { background: rgba(235, 88, 61, 0.2); color: #fff; border-color: #eb583d; }
+    .qr-modal-header { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #eb583d; margin-bottom: 1.5rem; }
+    .qr-modal-image { width: 100%; max-width: 300px; margin: 0 auto; display: block; border-radius: 8px; border: 2px solid #2a2a2a; padding: 8px; background: #fff; box-shadow: 0 8px 24px rgba(235, 88, 61, 0.15); }
+    .qr-modal-text { font-size: 0.8rem; color: #999; text-align: center; margin-top: 1.5rem; line-height: 1.5; }
+    .qr-modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
+    .qr-action-btn { flex: 1; padding: 0.8rem 1.5rem; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: #eb583d; color: #000; border: none; cursor: pointer; border-radius: 6px; transition: all 0.3s; font-weight: 600; }
+    .qr-action-btn:hover { background: #ff6b4a; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(235, 88, 61, 0.3); }
+    .qr-action-btn:active { transform: translateY(0); }
     @media (max-width: 768px) {
 
       .hero { grid-template-columns: 1fr; gap: 3rem; padding-top: 3rem; }
@@ -179,6 +262,12 @@
       input[type="file"], input[type="password"] { font-size: 16px; }
       .link-actions { flex-direction: column; }
       #copy-link-btn { width: 100%; }
+      #qr-btn { width: 100%; }
+      .drag-drop-zone { padding: 1.5rem; }
+      .drag-drop-icon { font-size: 1.5rem; }
+      .drag-drop-text { font-size: 0.8rem; }
+      .toast-container { bottom: 1rem; right: 1rem; }
+      .toast { min-width: 220px; font-size: 0.8rem; }
     }
     @media (max-width: 480px) {
       .container { padding: 0 1rem; }
@@ -274,12 +363,26 @@
           <% } %>
           <form id="upload-form" method="post" action="/upload" enctype="multipart/form-data">
             <div class="form-group">
-              <label for="file">Select file</label>
-              <input type="file" id="file" name="file" required />
+              <div id="drag-drop-zone" class="drag-drop-zone">
+                <div class="drag-drop-icon"></div>
+                <div class="drag-drop-text">Drag and drop your file here</div>
+                <div class="drag-drop-hint">or click to browse</div>
+              </div>
+              <input type="file" id="file" name="file" required hidden />
             </div>
+
+            <div id="progress-container" class="progress-container">
+              <div class="progress-bar-track">
+                <div id="progress-bar-fill" class="progress-bar-fill"></div>
+              </div>
+              <div class="progress-text">
+                <span id="progress-text">0%</span>
+              </div>
+            </div>
+
             <div class="form-group">
               <label for="password">Password (optional)</label>
-              <div class="password-input-wrap">
+              <div class="password-input-group">
                 <input type="password" id="password" name="password" placeholder="Leave empty for link-only access" pattern="\S*" title="Passwords cannot contain spaces." />
                 <button id="password-toggle" class="password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
               </div>
@@ -297,6 +400,11 @@
                 </label>
               </div>
             </div>
+
+            <% if (turnstileSiteKey) { %>
+              <div class="cf-turnstile" data-sitekey="<%= turnstileSiteKey %>" data-theme="dark"></div>
+            <% } %>
+
             <button id="upload-btn" type="submit">Encrypt &amp; Upload</button>
             <span id="upload-status" class="status" aria-live="polite"></span>
           </form>
@@ -305,6 +413,7 @@
             <a id="share-link" href="#"></a>
             <div class="link-actions">
               <button id="copy-link-btn" type="button">Copy link</button>
+              <button id="qr-btn" type="button">Share QR</button>
               <span id="copy-status" class="status" aria-live="polite"></span>
             </div>
           </div>
@@ -314,6 +423,23 @@
   </main>
 
   <%- include("partials/footer", { showOpenSourceLink: true }) %>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <div id="qr-modal" class="qr-modal">
+    <div class="qr-modal-content">
+      <button id="qr-modal-close" class="qr-modal-close" type="button" aria-label="Close QR modal">×</button>
+      <div class="qr-modal-header">Scan to share</div>
+      <img id="qr-image" class="qr-modal-image" src="" alt="QR Code for sharing" />
+      <p class="qr-modal-text">Scan this QR code to share the link with others</p>
+      <div class="qr-modal-actions">
+        <button id="qr-download-btn" class="qr-action-btn" type="button" style="width: 100%;">Download QR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cloudflare Turnstile for Bot Protection -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
   <script src="/upload.js" nonce="<%= cspNonce %>"></script>
 </body>

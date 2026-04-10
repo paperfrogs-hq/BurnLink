@@ -11,10 +11,38 @@
   var linkBoxEl = document.getElementById("link-box");
   var shareLinkEl = document.getElementById("share-link");
   var copyLinkBtn = document.getElementById("copy-link-btn");
-  var copyStatusEl = document.getElementById("copy-status");
+  var qrBtn = document.getElementById("qr-btn");
+  var qrModal = document.getElementById("qr-modal");
+  var qrModalClose = document.getElementById("qr-modal-close");
+  var qrImage = document.getElementById("qr-image");
+  var qrDownloadBtn = document.getElementById("qr-download-btn");
+  var dragDropZone = document.getElementById("drag-drop-zone");
+  var progressContainer = document.getElementById("progress-container");
+  var progressBarFill = document.getElementById("progress-bar-fill");
+  var progressText = document.getElementById("progress-text");
+  var toastContainer = document.getElementById("toast-container");
+
+  var currentFileId = null;
+
+  // ── Toast Notification System ──
+  function showToast(message, type) {
+    type = type || "info";
+    var toast = document.createElement("div");
+    toast.className = "toast " + type;
+    toast.textContent = message;
+    toastContainer.appendChild(toast);
+
+    setTimeout(function() {
+      toast.classList.add("hide");
+      setTimeout(function() {
+        toast.remove();
+      }, 300);
+    }, 3000);
+  }
 
   function setStatus(message) {
     statusEl.textContent = message || "";
+    statusEl.classList.remove("error");
   }
 
   function setError(message) {
@@ -26,7 +54,83 @@
     return /\s/.test(value || "");
   }
 
-  function togglePasswordVisibility() {
+  // ── Drag and Drop ──
+  function setupDragDrop() {
+    // Click to select file
+    dragDropZone.addEventListener("click", function(e) {
+      e.preventDefault();
+      fileInput.click();
+    });
+
+    dragDropZone.addEventListener("dragover", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragDropZone.classList.add("dragover");
+    }, false);
+
+    dragDropZone.addEventListener("dragleave", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragDropZone.classList.remove("dragover");
+    }, false);
+
+    dragDropZone.addEventListener("drop", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragDropZone.classList.remove("dragover");
+
+      var files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        fileInput.files = files;
+        handleFileSelected();
+      }
+    }, false);
+
+    fileInput.addEventListener("change", handleFileSelected);
+  }
+
+  function handleFileSelected() {
+    if (fileInput.files && fileInput.files.length > 0) {
+      var file = fileInput.files[0];
+      var sizeInMB = (file.size / 1024 / 1024).toFixed(2);
+      dragDropZone.innerHTML = '<div class="drag-drop-text">' + file.name + '</div><div class="drag-drop-hint">' + sizeInMB + ' MB</div>';
+      dragDropZone.style.borderColor = '#28a745';
+      dragDropZone.style.background = '#0a2a1a';
+      setStatus("File selected: " + file.name);
+    }
+  }
+
+  // ── Progress Indicator ──
+  function updateProgress(percent) {
+    progressBarFill.style.width = percent + "%";
+    progressText.textContent = percent + "%";
+  }
+
+  function showProgress() {
+    progressContainer.classList.add("active");
+    updateProgress(0);
+  }
+
+  function hideProgress() {
+    progressContainer.classList.remove("active");
+  }
+
+  // ── Turnstile Support ──
+  function getTurnstileToken() {
+    if (typeof window.turnstile !== 'undefined') {
+      return window.turnstile.getResponse();
+    }
+    return null;
+  }
+
+  function resetTurnstile() {
+    if (typeof window.turnstile !== 'undefined') {
+      window.turnstile.reset();
+    }
+  }
+
+  function togglePasswordVisibility(e) {
+    e.preventDefault();
     if (!passwordInput || !passwordToggleBtn) return;
     var showing = passwordInput.type === "text";
     passwordInput.type = showing ? "password" : "text";
@@ -35,9 +139,49 @@
     passwordToggleBtn.setAttribute("aria-label", showing ? "Show password" : "Hide password");
   }
 
+  function closeQrModal() {
+    if (qrModal) qrModal.classList.remove("active");
+  }
+
+  function openQrModal() {
+    if (qrModal) qrModal.classList.add("active");
+  }
+
+  async function generateAndShowQr() {
+    if (!currentFileId) return;
+    try {
+      var response = await fetch("/api/qr/" + currentFileId);
+      if (!response.ok) throw new Error("Failed to generate QR code");
+      var data = await response.json();
+      if (qrImage) {
+        qrImage.src = data.qrDataUrl;
+        qrImage.alt = "QR Code for sharing";
+      }
+      openQrModal();
+      showToast("QR code generated!", "success");
+    } catch (error) {
+      showToast("Failed to generate QR: " + error.message, "error");
+    }
+  }
+
+  function downloadQrCode() {
+    if (!qrImage || !qrImage.src) return;
+    try {
+      var link = document.createElement("a");
+      link.href = qrImage.src;
+      link.download = "burnlink-qr-" + currentFileId + ".png";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("QR code downloaded!", "success");
+    } catch (err) {
+      showToast("Failed to download QR code", "error");
+    }
+  }
+
   function showLinkBox(fileId, baseUrl, hasPassword) {
+    var displayUrl = baseUrl + "/s/" + fileId;
     var shareUrl;
-    var displayUrl = baseUrl + "/s/" + fileId; // always clean for display
 
     if (hasPassword) {
       shareUrl = displayUrl;
@@ -46,7 +190,8 @@
       shareUrl = linkKey ? displayUrl + "#" + linkKey : displayUrl;
     }
 
-    shareLinkEl.href = displayUrl;        // clean URL — key is now stored server-side
+    currentFileId = fileId;
+    shareLinkEl.href = shareUrl;
     shareLinkEl.textContent = displayUrl;
     linkBoxEl.hidden = false;
   }
@@ -88,10 +233,6 @@
     );
   }
 
-  // Derives a server-side authentication token from the password.
-  // A low-iteration PBKDF2 with a fixed public salt is used so the raw
-  // password never leaves the browser; the server only ever stores a
-  // bcrypt hash of this derived token — not the actual encryption key.
   async function deriveServerToken(password) {
     var baseKey = await crypto.subtle.importKey(
       "raw",
@@ -136,18 +277,16 @@
       await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, fileData)
     );
 
-    // Build envelope: "FSE1" + version + mode + saltLen + ivLen + salt + iv + ciphertext
     var envelope = new Uint8Array(
       8 + salt.length + iv.length + ciphertext.length
     );
 
-    // "FSE1" magic
-    envelope[0] = 70; // F
-    envelope[1] = 83; // S
-    envelope[2] = 69; // E
-    envelope[3] = 49; // 1
-    envelope[4] = 1; // version
-    envelope[5] = 1; // mode (password)
+    envelope[0] = 70;
+    envelope[1] = 83;
+    envelope[2] = 69;
+    envelope[3] = 49;
+    envelope[4] = 1;
+    envelope[5] = 1;
     envelope[6] = salt.length;
     envelope[7] = iv.length;
 
@@ -177,17 +316,15 @@
       await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, fileData)
     );
 
-    // Build envelope: "FSE1" + version + mode + saltLen + ivLen + iv + ciphertext
     var envelope = new Uint8Array(8 + iv.length + ciphertext.length);
 
-    // "FSE1" magic
-    envelope[0] = 70; // F
-    envelope[1] = 83; // S
-    envelope[2] = 69; // E
-    envelope[3] = 49; // 1
-    envelope[4] = 1; // version
-    envelope[5] = 2; // mode (link)
-    envelope[6] = 0; // saltLen
+    envelope[0] = 70;
+    envelope[1] = 83;
+    envelope[2] = 69;
+    envelope[3] = 49;
+    envelope[4] = 1;
+    envelope[5] = 2;
+    envelope[6] = 0;
     envelope[7] = iv.length;
 
     var offset = 8;
@@ -210,18 +347,18 @@
     try {
       if (!fileInput.files || fileInput.files.length === 0) {
         setError("Please select a file.");
+        uploadBtn.disabled = false;
         return;
       }
-
 
       var file = fileInput.files[0];
-      var MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB
+      var MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024;
       if (file.size > MAX_UPLOAD_BYTES) {
         setError("File too large. Maximum upload size is 1 GB.");
+        uploadBtn.disabled = false;
         return;
       }
 
-      // Get selected mode
       var modeRadios = document.getElementsByName("mode");
       var selectedMode = "download";
       for (var i = 0; i < modeRadios.length; i++) {
@@ -231,18 +368,13 @@
         }
       }
 
-      // Restrict zip files in both modes
-      if (file.name.toLowerCase().endsWith(".zip")) {
-        setError("Zip files are not supported.");
-        return;
-      }
-
       var fileData = await file.arrayBuffer();
       var fileDataBytes = new Uint8Array(fileData);
       var userPassword = passwordInput.value;
 
       if (hasWhitespace(userPassword)) {
         setError("Passwords cannot contain spaces.");
+        uploadBtn.disabled = false;
         return;
       }
 
@@ -260,65 +392,97 @@
         linkKey = result.linkKey;
       }
 
-      // Step 1 — get a presigned PUT URL from the server
       setStatus("Preparing secure upload...");
       var presignRes = await fetch("/api/presign?" + new URLSearchParams({ filename: file.name, filesize: file.size }));
       if (!presignRes.ok) throw new Error("Could not get upload URL. Please try again.");
       var presignData = await presignRes.json();
 
-      // Step 2 — encrypt the file (already done above)
-      // Step 3 — PUT encrypted bytes directly to R2 (bypasses Netlify size cap)
-      // No Content-Type header here — keeps this a CORS simple request (no preflight)
+      showProgress();
       setStatus("Uploading encrypted file...");
-      var putRes;
-      try {
-        putRes = await fetch(presignData.uploadUrl, {
-          method: "PUT",
-          body: new Blob([encryptedPayload]),
-        });
-      } catch (putErr) {
-        throw new Error("Upload blocked (CORS or network). Check R2 CORS policy allows this origin. Detail: " + putErr.message);
-      }
-      if (!putRes.ok) throw new Error("Upload to storage failed (HTTP " + putRes.status + "). Please try again.");
 
-      // Step 4 — tell the server to save the metadata
-      setStatus("Finalizing...");
-      var serverToken = userPassword ? await deriveServerToken(userPassword) : null;
-      var commitPayload = {
-        storagePath: presignData.storagePath,
-        originalName: file.name,
-        mode: selectedMode,
-      };
-      if (serverToken) commitPayload.password = serverToken;
-      if (linkKey) commitPayload.linkKey = toBase64Url(linkKey);
+      var blob = new Blob([encryptedPayload]);
+      var xhr = new XMLHttpRequest();
 
-      var commitRes = await fetch("/api/commit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(commitPayload),
+      xhr.upload.addEventListener("progress", function(e) {
+        if (e.lengthComputable) {
+          var percent = Math.round((e.loaded / e.total) * 100);
+          updateProgress(percent);
+          setStatus("Uploading... " + percent + "%");
+        }
       });
 
-      if (!commitRes.ok) {
-        var message = "Upload failed. Please try again.";
-        try {
-          var errorBody = await commitRes.json();
-          if (errorBody && errorBody.error) message = errorBody.error;
-        } catch (e) {
-          message = "Upload failed (HTTP " + commitRes.status + ")";
+      xhr.addEventListener("load", async function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setStatus("Finalizing...");
+          hideProgress();
+
+          var serverToken = userPassword ? await deriveServerToken(userPassword) : null;
+          var commitPayload = {
+            storagePath: presignData.storagePath,
+            originalName: file.name,
+            mode: selectedMode,
+          };
+          if (serverToken) commitPayload.password = serverToken;
+          if (linkKey) commitPayload.linkKey = toBase64Url(linkKey);
+
+          var turnstileToken = getTurnstileToken();
+          if (turnstileToken) {
+            commitPayload["cf-turnstile-response"] = turnstileToken;
+          }
+
+          var commitRes = await fetch("/api/commit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(commitPayload),
+          });
+
+          if (!commitRes.ok) {
+            var message = "Upload failed. Please try again.";
+            try {
+              var errorBody = await commitRes.json();
+              if (errorBody && errorBody.error) message = errorBody.error;
+            } catch (e) {}
+            throw new Error(message);
+          }
+
+          var commitData = await commitRes.json();
+          if (linkKey) {
+            sessionStorage.setItem("__fse_link_key_" + commitData.id, toBase64Url(linkKey));
+          }
+
+          showLinkBox(commitData.id, commitData.baseUrl, hasPassword);
+          setStatus("File successfully uploaded!");
+          showToast("File has been uploaded! Your secure link is ready to share.", "success");
+          resetTurnstile();
+
+          fileInput.value = "";
+          passwordInput.value = "";
+          dragDropZone.innerHTML = '<div class="drag-drop-text">Drag and drop your file here</div><div class="drag-drop-hint">or click to browse</div>';
+          dragDropZone.style.borderColor = '#2a2a2a';
+          dragDropZone.style.background = '#0f0f0f';
+        } else {
+          throw new Error("Upload to storage failed (HTTP " + xhr.status + "). Please try again.");
         }
-        throw new Error(message);
-      }
+      });
 
-      var result = await commitRes.json();
+      xhr.addEventListener("error", function() {
+        hideProgress();
+        throw new Error("Upload blocked (CORS or network error).");
+      });
 
-      showLinkBox(result.id, result.baseUrl, hasPassword);
-      setStatus("Success! Your secure link is ready.");
+      xhr.addEventListener("abort", function() {
+        hideProgress();
+        throw new Error("Upload cancelled.");
+      });
 
-      // Reset form
-      fileInput.value = "";
-      passwordInput.value = "";
+      xhr.open("PUT", presignData.uploadUrl);
+      xhr.send(blob);
+
     } catch (error) {
+      hideProgress();
       setError(error.message || "Failed to upload file.");
+      showToast(error.message || "Failed to upload", "error");
+      resetTurnstile();
     } finally {
       uploadBtn.disabled = false;
     }
@@ -326,22 +490,45 @@
 
   async function handleCopyLink(event) {
     event.preventDefault();
-    var linkUrl = shareLinkEl.href; // clean URL — key is now stored server-side
+    var linkUrl = shareLinkEl.href;
 
     try {
       await navigator.clipboard.writeText(linkUrl);
-      copyStatusEl.textContent = "Copied!";
-      setTimeout(() => {
-        copyStatusEl.textContent = "";
-      }, 2000);
+      showToast("Link copied to clipboard!", "success");
     } catch (error) {
-      copyStatusEl.textContent = "Failed to copy.";
+      showToast("Failed to copy link", "error");
     }
   }
 
+  // ── Event Listeners ──
   form.addEventListener("submit", handleSubmit);
-  copyLinkBtn.addEventListener("click", handleCopyLink);
+
+  if (copyLinkBtn) {
+    copyLinkBtn.addEventListener("click", handleCopyLink);
+  }
+
   if (passwordToggleBtn) {
     passwordToggleBtn.addEventListener("click", togglePasswordVisibility);
   }
+
+  if (qrBtn) {
+    qrBtn.addEventListener("click", generateAndShowQr);
+  }
+
+  if (qrModalClose) {
+    qrModalClose.addEventListener("click", closeQrModal);
+  }
+
+  if (qrModal) {
+    qrModal.addEventListener("click", function(e) {
+      if (e.target === qrModal) closeQrModal();
+    });
+  }
+
+  if (qrDownloadBtn) {
+    qrDownloadBtn.addEventListener("click", downloadQrCode);
+  }
+
+  // Setup drag-drop on page load
+  setupDragDrop();
 })();
