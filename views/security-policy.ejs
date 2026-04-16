@@ -343,10 +343,12 @@
         <div class="policy-content">
           <h1>Security Policy</h1>
           <p class="intro">
-            BurnLink takes security seriously. If you discover a vulnerability,
-            we ask that you report it to us privately before disclosing it
-            publicly. We will acknowledge your report within 48 hours and work
-            to resolve confirmed issues promptly.
+            BurnLink takes security seriously. Our platform includes enterprise-grade
+            security with automated threat detection, real-time email alerting, and
+            continuous security monitoring. If you discover a vulnerability, we ask
+            that you report it to us privately before disclosing it publicly. We will
+            acknowledge your report within 48 hours and work to resolve confirmed
+            issues promptly.
           </p>
 
           <h2>How to report</h2>
@@ -396,6 +398,12 @@
             <li>Server-side request forgery (SSRF)</li>
             <li>
               Sensitive data leakage (metadata, filenames, encryption keys)
+            </li>
+            <li>Bypasses to automated security monitoring and alerting systems</li>
+            <li>Evasion of rate limiting or DDoS protection mechanisms</li>
+            <li>Security event logging manipulation or circumvention</li>
+            <li>
+              Flaws in automated incident response or threat detection logic
             </li>
           </ul>
 
@@ -472,9 +480,10 @@
           </ul>
 
           <div class="notice">
-            BurnLink's primary security promise is that the raw encryption key
-            never leaves your browser and that one-time links are truly
-            one-time. Any finding that breaks either of these guarantees will be
+            BurnLink's primary security promises are: (1) the raw encryption key
+            never leaves your browser, (2) one-time links are truly one-time, and
+            (3) all security threats are automatically detected and reported in
+            real-time. Any finding that breaks any of these guarantees will be
             treated as critical severity regardless of CVSS score.
           </div>
 
