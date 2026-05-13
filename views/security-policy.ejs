@@ -376,6 +376,12 @@
               One-time link bypass — race conditions, caching, or replay attacks
             </li>
             <li>
+              Download count manipulation or bypass (v1.2.0 flexible expiry)
+            </li>
+            <li>
+              Time-based expiry logic flaws or clock skew exploitation
+            </li>
+            <li>
               IDOR (Insecure Direct Object Reference) on
               <code
                 style="
@@ -385,7 +391,15 @@
                 "
                 >/api/</code
               >
-              endpoints
+              endpoints (including <code style="
+                  color: #eb583d;
+                  background: #111;
+                  padding: 0.1rem 0.35rem;
+                ">/api/file-info</code> and <code style="
+                  color: #eb583d;
+                  background: #111;
+                  padding: 0.1rem 0.35rem;
+                ">/api/share</code>)
             </li>
             <li>
               Password protection logic flaws (brute-force bypass, timing
@@ -397,7 +411,8 @@
             </li>
             <li>Server-side request forgery (SSRF)</li>
             <li>
-              Sensitive data leakage (metadata, filenames, encryption keys)
+              Sensitive data leakage (metadata, filenames, encryption keys,
+              recipient information)
             </li>
             <li>Bypasses to automated security monitoring and alerting systems</li>
             <li>Evasion of rate limiting or DDoS protection mechanisms</li>

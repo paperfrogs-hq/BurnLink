@@ -220,6 +220,9 @@
         background: #1e1e1e;
         border: 1px solid #1e1e1e;
       }
+      .features.expanded {
+        grid-template-columns: repeat(3, 1fr);
+      }
       .feature {
         background: #0a0a0a;
         padding: 2rem;
@@ -559,7 +562,7 @@
         <p class="section-sub">
           Every feature exists to protect your privacy, not compromise it.
         </p>
-        <div class="features">
+        <div class="features expanded">
           <div class="feature">
             <span class="feature-tag">Encryption</span>
             <strong>AES-256-GCM</strong>
@@ -713,11 +716,11 @@
           </div>
           <div class="principle">
             <div class="principle-num">02</div>
-            <strong>One access, then gone</strong>
+            <strong>One-time access, always</strong>
             <p>
-              The database record is deleted atomically before the file is
-              delivered. Subsequent requests return 410 Gone. There is no
-              concept of multiple downloads per link.
+              Files burn immediately after first access. No exceptions, no 
+              options, no complexity. Once opened, the file and link are permanently 
+              deleted from all storage.
             </p>
           </div>
           <div class="principle">

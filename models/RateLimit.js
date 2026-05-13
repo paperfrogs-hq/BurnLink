@@ -1,21 +1,3 @@
-/**
- * Supabase-backed rate limiter for sensitive endpoints.
- *
- * Survives cold starts / serverless restarts — state lives in the DB.
- * Fails OPEN on Supabase errors so a DB hiccup never blocks legitimate users.
- *
- * Required SQL (run once in Supabase SQL editor):
- * ─────────────────────────────────────────────
- * create table if not exists rate_limits (
- *   key       text primary key,
- *   count     integer not null default 1,
- *   reset_at  timestamptz not null
- * );
- *
- * -- Periodically purge expired rows (optional cron or pg_cron job):
- * -- delete from rate_limits where reset_at < now();
- * ─────────────────────────────────────────────
- */
 
 const supabase = require("../lib/supabase");
 

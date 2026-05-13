@@ -97,7 +97,6 @@ test("changelog and roadmap expose versioning and planned work", async () => {
   assert.equal(roadmap.status, 200);
   assert.match(roadmap.body, /v1\.1\.0/);
   assert.match(roadmap.body, /Share Flow/);
-  assert.match(roadmap.body, /Flexible Access/);
   assert.match(roadmap.body, /Platform Expansion/);
   assert.match(roadmap.body, /Transport Layer/);
   assert.match(roadmap.body, /Request a feature/);

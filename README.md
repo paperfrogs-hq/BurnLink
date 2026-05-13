@@ -1,231 +1,207 @@
 # BurnLink
 
-[![GitHub](https://img.shields.io/badge/GitHub-BurnLink-blue?logo=github)](https://github.com/paperfrogs-hq/BurnLink)
+[![GitHub](https://img.shields.io/badge/GitHub-BurnLink-blue?logo=github)](https://github.com/Joy-Majumder/BurnLink)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Live](https://img.shields.io/badge/Live-burnlink.page-brightgreen)](https://burnlink.page)
-[![Changelog](https://img.shields.io/badge/Changelog-View-informational)](https://burnlink.page/changelog)
-[![Roadmap](https://img.shields.io/badge/Roadmap-Planned-blue)](https://burnlink.page/roadmap)
 
-BurnLink is an **open-source, privacy-first file sharing platform** with browser-side end-to-end encryption. Files are encrypted in your browser before ever leaving your device, and permanently deleted after the first download.
+Secure, self-destructing file sharing for sensitive documents, credentials, and confidential data. Built with client-side encryption, zero-knowledge architecture, and **fully open source** for community audit and self-hosting.
 
-> **v1.1.1 – April 2026** | Now in production with improved sharing UX and self-hosting support.
+**Version 1.2.0** — May 2026 | [MIT License](./LICENSE)
 
 ---
 
 ## Table of Contents
 
-- [Why BurnLink?](#why-burnlink)
+- [Why BurnLink](#why-burnlink)
 - [Features](#features)
-- [How It Works](#how-it-works)
-- [Security Model](#security-model)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Self-Hosting](#self-hosting)
+- [Security](#security)
+- [Architecture](#architecture)
 - [Contributing](#contributing)
 - [Support](#support)
+- [License](#license)
 
----
+## Why BurnLink
 
-## Why BurnLink?
+Most file sharing services store your files on their servers—sometimes permanently, often without end-to-end encryption. BurnLink operates on a different principle:
 
-**For Users:** Stop worrying about file sharing security. With browser-side encryption and one-time access, you control exactly how your files are delivered and destroyed.
+### Zero-Knowledge by Design
+- **Files never exist unencrypted** — Encryption happens in your browser before upload
+- **Server sees only encrypted data** — Even administrators cannot access file contents
+- **No accounts required** — Share directly without creating profiles
+- **Automatic deletion** — Files burn after the first download
 
-**For Teams:** Deploy BurnLink on your own infrastructure for private, encrypted file sharing without corporate intermediaries. Your data stays yours.
+### Transparency You Control
+- **100% open source** — Full code available on GitHub for review and audit
+- **Community-driven** — Contributions welcome from developers worldwide
+- **No proprietary code** — Exactly what you see is what runs
+- **Self-host anytime** — Deploy on your own infrastructure with no restrictions
+- **No vendor lock-in** — Export data, switch servers, modify as needed
 
-**For Developers:** Open source, auditable, and built with modern web standards. Fork it, understand it, modify it.
+### Practical Security
+- **Single-use links** — Each share link works only once
+- **Password protection** — Optional additional layer
+- **Expiration options** — Files auto-delete after 15 days
+- **View-once mode** — Recipients have 60 seconds to access before deletion
+- **Rate limiting and brute-force protection** — Built-in defense against attacks
+
+### Use Cases
+- Sharing credentials and API keys with team members
+- Sending sensitive documents to clients or partners
+- Exchanging confidential information securely
+- Temporary file sharing with guaranteed cleanup
+- Internal tools requiring high trust and auditability
+
+### How BurnLink Compares
+
+| Feature | BurnLink | WeTransfer | Google Drive | Email |
+|---------|----------|-----------|-------------|-------|
+| Client-side encryption | ✓ | ✗ | ✗ | ✗ |
+| Zero-knowledge | ✓ | ✗ | ✗ | ✗ |
+| Auto-delete on view | ✓ | ✗ | ✗ | ✗ |
+| Single-use links | ✓ | ✗ | ✗ | ✗ |
+| Open source | ✓ | ✗ | ✗ | ✗ |
+| Self-hostable | ✓ | ✗ | ✓ | ✓ |
+| No accounts needed | ✓ | ✓ | ✗ | ✓ |
+| End-to-end encrypted | ✓ | ✗ | ✓* | ✗ |
+
+*Google Drive requires specific configuration
 
 ---
 
 ## Features
 
-### 🔒 Security First
-- **Browser-Side E2E Encryption** — Files are encrypted client-side using AES-256-GCM before upload. The server never sees plaintext data.
-- **Two Sharing Modes**
-  - **Password-protected** — Recipient enters a password to decrypt the file
-  - **Link-key** — Decryption key is embedded in the URL fragment (never sent to server)
-- **One-Time Links** — Files are permanently destroyed after the first successful download
-- **Brute-Force Protection** — 10-minute lockout after 3 failed password attempts
-- **View-Once Mode** — File is viewable for 60 seconds, then burned regardless of download status
+### Sharing
+- **No account required** — Share immediately
+- **Single-use links** — Files deleted after first access
+- **Batch uploads** — Share multiple files with one link
+- **Password protection** — Add optional security layer
+- **Custom expiration** — Auto-delete after 15 days or user-defined period
+- **View-once mode** — Recipients have 60 seconds before automatic deletion
 
-### 🎯 Developer-Friendly
-- **Up to 1 GB** file size support (configurable)
-- **Presigned URLs** — Direct client-to-storage transfers via Cloudflare R2
-- **RESTful API** — Clean endpoints for upload, link management, and metadata
-- **Rate Limiting** — Built-in protection against abuse and attacks
+### Security & Privacy
+- **Client-side encryption** — AES-256-GCM encryption in your browser
+- **Zero-knowledge architecture** — Server cannot access file contents
+- **One-time tokens** — Each link is valid only once
+- **Brute-force protection** — Failed access attempts trigger 10-minute lockout
+- **CSRF protection** — Protection against cross-site attacks
+- **No tracking** — No analytics or telemetry
 
-### 📱 User Experience
-- **Clean, Minimal UI** — Responsive design across all devices
-- **Drag-and-Drop** — Simple file upload with progress tracking
-- **QR Codes** — Generate QR codes for instant link sharing
-- **Copy-to-Clipboard** — One-click link sharing with toast feedback
-- **Mobile-Responsive** — Works seamlessly on phones, tablets, and desktops
-
----
-
-## How It Works
-
-```
-1. Upload          → You select a file and optionally set a password
-2. Encrypt         → File is encrypted entirely in your browser (AES-256-GCM)
-3. Store           → Encrypted payload goes to Cloudflare R2; metadata to Supabase
-4. Share           → You get a one-time shareable link with unique token
-5. Download        → Recipient decrypts in their browser, file is permanently destroyed
-```
-
-**Data Flow Diagram:**
-```
-User Browser                  BurnLink Server               Storage
-   │                               │                           │
-   ├─ Encrypt File ──────────────►│                           │
-   │                               │─ Store Encrypted Data ──►│ Cloudflare R2
-   │                               │─ Store Metadata ────────► Supabase
-   │                               │
-   │ Generate Link ◄──────────────│
-   │   & Token                    │
-   │
-   └─ Share Link                  │
-         (with recipient)          │
-              │                    │
-              └─ Recipient ──────►│ Verify Token & Burn Link
-                  Downloads       │─ Delete Metadata
-                                  │
-                               ┌──┴─► Delete Encrypted File
-```
+### Technical
+- **Up to 1GB files** — Configurable per deployment
+- **Multiple access modes** — Password-protected or URL-fragment key
+- **Rate limiting** — Per-endpoint protection
+- **Fast transfers** — Direct browser-to-storage uploads
+- **Mobile friendly** — Works on all devices
 
 ---
 
-## Security Model
+## Architecture
 
-### What We Protect
-- **File Confidentiality** — Encrypted end-to-end; server cannot read plaintext
-- **Access Control** — One-time tokens prevent unauthorized access
-- **Integrity** — AES-256-GCM includes authentication (AEAD cipher)
-- **Replay Protection** — Links burn after first access; tokens become invalid
+### How It Works
 
-### Encryption Details
-- **Algorithm** — AES-256-GCM (Authenticated Encryption with Associated Data)
-- **Key Derivation** — PBKDF2 with 210,000 iterations
-- **Password Salt** — Randomly generated per upload
-- **Nonce** — Unique per encryption operation
+**Sharing a file:**
+1. Select file in browser
+2. Encrypt file with AES-256-GCM (key from password or generated)
+3. Upload encrypted file to storage
+4. Generate single-use share link
+5. Send link to recipient
 
-### What We Don't Protect
-- **Metadata** — We store encrypted file size, MIME type, and upload timestamp
-- **Access Patterns** — We can see when files are downloaded (no analytics, just logs)
-- **Log Data** — Server logs include IP addresses for security auditing
+**Accessing a file:**
+1. Recipient opens share link
+2. Server verifies link is valid and unused
+3. Browser downloads and decrypts file
+4. File is automatically deleted from storage
+5. Link becomes invalid for future access
 
-### Best Practices
-1. **Always use passwords** for sensitive files
-2. **Share links securely** — Use Signal, WhatsApp, or in-person
-3. **Verify identities** — Confirm the recipient before sharing
-4. **Review public pages** — Check our [Security Policy](https://burnlink.page/security-policy) for full details
+### Design Principles
 
----
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| **Frontend** | Vanilla JS + HTML/CSS | No tracking, minimal dependencies |
-| **Backend** | Node.js + Express | Lightweight, production-ready |
-| **Templating** | EJS | Dynamic server-side rendering |
-| **Database** | Supabase (PostgreSQL) | Metadata storage, user sessions |
-| **Storage** | Cloudflare R2 | S3-compatible, encrypted files |
-| **Encryption** | Web Crypto API | Native browser crypto (AES-256-GCM) |
-| **Deployment** | Netlify Functions | Serverless, auto-scaling |
+- **Encryption first** — Nothing is ever stored unencrypted on the server
+- **Minimal metadata** — Only store what's necessary (size, type, timestamps)
+- **Fail secure** — All access defaults to denied unless explicitly verified
+- **Audit transparency** — All code is open source and reviewable
+- **Deployment flexibility** — Run as managed service or self-hosted
 
 ---
 
-## Getting Started
+## Security
 
-### Prerequisites
-- **Node.js** 18+ and npm/yarn
-- **Supabase account** (free tier works)
-- **Cloudflare R2 account** (free tier works)
+### Encryption
 
-### Local Development
+- **Algorithm:** AES-256-GCM (Authenticated Encryption with Associated Data)
+- **Key derivation:** 
+  - Password mode: PBKDF2 with 210,000 iterations and random salt
+  - Link-key mode: Generated client-side and embedded in URL fragment
+- **Random IV:** Generated for each encryption operation
+- **Authenticated:** GCM provides integrity verification
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/paperfrogs-hq/BurnLink.git
-   cd BurnLink
-   ```
+### What Is Encrypted
+- File content (always encrypted before leaving your browser)
+- File contents are never accessible to the server
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+### What Is Not Encrypted
+- File size, MIME type, timestamps (stored for operation)
+- Upload and access metadata (for logging and debugging)
+- Access patterns (when files were downloaded)
 
-3. **Set up environment variables** (copy `.env.example` to `.env`)
-   ```bash
-   cp .env.example .env
-   ```
-   Fill in your Supabase and Cloudflare credentials.
+### Important Limitations
 
-4. **Start the development server**
-   ```bash
-   npm run dev
-   ```
-   Open `http://localhost:3000` in your browser.
+**This is not a zero-knowledge system for the server.** The server operator can:
+- See file size and type
+- Observe upload and download timestamps
+- See access patterns and IP addresses (for rate limiting)
+- Access metadata about shared files
 
-5. **Run tests** (optional)
-   ```bash
-   npm test
-   ```
+**For maximum security:**
+- Use password protection for sensitive files
+- Only share links through trusted channels
+- Delete links after use
+- Consider the server operator as part of your threat model
 
-### Environment Variables
+**Self-hosting:** When you self-host BurnLink, you control the entire system and can implement additional security measures.
 
-See [SELFHOST.md](./SELFHOST.md) for detailed setup instructions and all available environment variables.
+### Additional Protections
+
+- **One-time tokens:** Each share link is valid for only one access
+- **Brute-force defense:** 3 failed decryption attempts trigger 10-minute lockout
+- **Rate limiting:** Prevents abuse of upload and access endpoints
+- **Session security:** CSRF protection on state-changing operations
+- **Automatic cleanup:** Files are deleted from storage after access or expiration
 
 ---
 
-## Self-Hosting
+## Deployment
 
-Want to run BurnLink on your own infrastructure? We support early adopters with a dedicated self-hosting guide.
+BurnLink can be deployed in multiple ways:
 
-**See [SELFHOST.md](./SELFHOST.md)** for complete instructions on:
-- Local setup and configuration
-- Deployment to Netlify, Vercel, or your own server
-- Database and storage configuration
-- Running in production
-- Troubleshooting common issues
+- **Use the public service** — Visit [burnlink.page](https://burnlink.page)
+- **Self-host on your infrastructure** — Full source code provided
+- **Deploy to cloud platforms** — Netlify, Vercel, or traditional VPS
+
+For self-hosting details and deployment instructions, see the repository's technical documentation.
 
 ---
 
 ## Contributing
 
-We welcome contributions! Whether it's bug fixes, features, or documentation:
+Contributions are welcome. To contribute:
 
-1. **Fork the repository**
-2. **Create a feature branch** (`git checkout -b feature/your-feature`)
-3. **Commit your changes** with clear messages
-4. **Push to your fork** and open a pull request
-
-For significant changes, please open an issue first to discuss your approach.
+1. Fork the repository on GitHub
+2. Create a feature branch for your changes
+3. Submit a pull request with clear commit messages
+4. For security issues, see [SECURITY.md](./SECURITY.md)
 
 ---
 
 ## Support
 
-### Getting Help
-- **Issues & Bugs** — [Open an issue](https://github.com/paperfrogs-hq/BurnLink/issues)
-- **Feature Requests** — [Request a feature](https://burnlink.page/roadmap)
-- **Security Issues** — [Report privately](./SECURITY.md)
-- **Questions** — [Email us](mailto:hello@paperfrogs.dev?subject=BurnLink%20Question)
+For questions or issues:
 
-### Find Out What's Next
-- **Changelog** — [View release history](https://burnlink.page/changelog)
-- **Roadmap** — [See planned features](https://burnlink.page/roadmap)
+- **Bug reports:** [GitHub Issues](https://github.com/Joy-Majumder/BurnLink/issues)
+- **Security concerns:** See [SECURITY.md](./SECURITY.md)
+- **Email:** hello@paperfrogs.dev
 
 ---
 
 ## License
 
-BurnLink is released under the **MIT License**. See [LICENSE](./LICENSE) for details.
-
----
-
-## About
-
-BurnLink is a product of **[Paperfrogs](https://paperfrogs.dev)** — an infrastructure-first studio building research-driven, production-ready tools for privacy, security, and developer experience.
-
-**Questions about the project?** Email [hello@paperfrogs.dev](mailto:hello@paperfrogs.dev).
+BurnLink is licensed under the MIT License. See [LICENSE](./LICENSE) for details.

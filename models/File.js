@@ -1,7 +1,9 @@
 const bcrypt = require("bcryptjs");
 const supabase = require("../lib/supabase");
+const { validators } = require("../lib/security");
 
 const filesTable = process.env.SUPABASE_FILES_TABLE || "files";
+const PASSWORD_MIN_LENGTH = 4;
 
 function mapRow(row) {
   if (!row) return null;
@@ -15,13 +17,56 @@ function mapRow(row) {
     mode: row.mode || "download",
     expiresAt: row.expires_at || null,
     linkKey: row.link_key || null,
+    bundleId: row.bundle_id || null,
   };
 }
 
-async function createFile({ path, originalName, password, mode = "download", linkKey = null }) {
+async function createFile({ 
+  path, 
+  originalName, 
+  password, 
+  mode = "download", 
+  linkKey = null,
+  bundleId = null,
+}) {
+  // Validate inputs
+  if (!path || typeof path !== "string") {
+    throw new Error("Invalid path");
+  }
+  if (!validators.isValidStoragePath(path)) {
+    throw new Error("Path must be in format YYYY-MM-DD/UUID-filename");
+  }
+
+  if (originalName && typeof originalName !== "string") {
+    throw new Error("Invalid originalName");
+  }
+
+
+
+  if (password) {
+    if (typeof password !== "string") {
+      throw new Error("Invalid password");
+    }
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      throw new Error(`Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
+    }
+    if (password.length > 255) {
+      throw new Error("Password too long");
+    }
+    if (/\s/.test(password)) {
+      throw new Error("Password cannot contain spaces");
+    }
+  }
+
+  if (mode && !["download", "view-once"].includes(mode)) {
+    throw new Error("Invalid mode: must be 'download' or 'view-once'");
+  }
+
+  if (linkKey && !validators.isValidLinkKey(linkKey)) {
+    throw new Error("Invalid link key");
+  }
+
   const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
-  // Don't set expiry on creation — it's set on first access instead
-  const expiresAt = null;
 
   const { data, error } = await supabase
     .from(filesTable)
@@ -32,8 +77,9 @@ async function createFile({ path, originalName, password, mode = "download", lin
       failed_attempts: 0,
       locked_until: null,
       mode,
-      expires_at: expiresAt,
+      expires_at: null,
       link_key: linkKey || null,
+      bundle_id: bundleId || null,
     })
     .select("*")
     .single();
@@ -43,19 +89,6 @@ async function createFile({ path, originalName, password, mode = "download", lin
   }
 
   return mapRow(data);
-}
-
-async function setExpiryOnFirstAccess(id) {
-  const expiresAt = new Date(Date.now() + 60000).toISOString();
-  const { error } = await supabase
-    .from(filesTable)
-    .update({ expires_at: expiresAt })
-    .eq("id", id)
-    .is("expires_at", null);
-
-  if (error) {
-    throw new Error(error.message);
-  }
 }
 
 async function findFileById(id) {
@@ -70,6 +103,20 @@ async function findFileById(id) {
   }
 
   return mapRow(data);
+}
+
+async function findFilesByBundleId(bundleId) {
+  const { data, error } = await supabase
+    .from(filesTable)
+    .select("*")
+    .eq("bundle_id", bundleId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ? data.map(mapRow) : [];
 }
 
 async function updateLockState(id, failedAttempts, lockedUntil) {
@@ -108,8 +155,8 @@ function comparePassword(file, password) {
 module.exports = {
   createFile,
   findById: findFileById,
+  findByBundleId: findFilesByBundleId,
   deleteById: deleteFileById,
   updateLockState,
   comparePassword,
-  setExpiryOnFirstAccess,
 };

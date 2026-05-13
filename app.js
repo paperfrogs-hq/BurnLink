@@ -17,11 +17,29 @@ const {
   changelogEntries,
   roadmapColumns,
 } = require("./lib/product-updates");
+const {
+  getHelmetConfig,
+  cspMiddleware,
+  cspReportHandler,
+  validators,
+  validateEnvironment,
+  requestIdMiddleware,
+  securityLog,
+} = require("./lib/security");
 
 const { uploadToStorage, downloadFromStorage, streamFromStorage, removeFromStorage, getPresignedPutUrl, getPresignedGetUrl, getFirstBytes } = require("./lib/r2");
 
+// Validate environment on startup
+validateEnvironment();
+
 const app = express();
 app.disable("x-powered-by");
+
+// Security headers via helmet
+app.use(getHelmetConfig());
+
+// Request ID tracking for audit trails
+app.use(requestIdMiddleware);
 const canonicalBaseUrl = process.env.CANONICAL_BASE_URL || "https://burnlink.page";
 const MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB hard cap
 const configuredMaxUploadBytes = Number(process.env.MAX_UPLOAD_BYTES || MAX_UPLOAD_BYTES);
@@ -29,6 +47,7 @@ const hasAppUploadLimit =
   Number.isFinite(configuredMaxUploadBytes) && configuredMaxUploadBytes > 0;
 const PASSWORD_MAX_ATTEMPTS = 3;
 const PASSWORD_LOCK_MINUTES = 10;
+const PASSWORD_MIN_LENGTH = 4;
 const enforceCanonicalRedirect = process.env.ENFORCE_CANONICAL_REDIRECT === "true";
 const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 const r2CspOrigin = process.env.R2_ACCOUNT_ID
@@ -73,6 +92,43 @@ function makeCleanupToken(storagePath) {
 function passwordHasWhitespace(password) {
   return typeof password === "string" && /\s/.test(password);
 }
+
+function isValidPassword(password) {
+  return validators.validatePassword(password);
+}
+
+// ── CSRF Token Protection ──────────────────────────────────────────────────
+// Simple in-memory CSRF token store with automatic cleanup
+const csrfTokens = new Map();
+
+function generateCsrfToken() {
+  const token = crypto.randomBytes(32).toString('hex');
+  csrfTokens.set(token, Date.now());
+  return token;
+}
+
+function validateCsrfToken(token) {
+  if (!token || typeof token !== 'string') return false;
+  const exists = csrfTokens.has(token);
+  if (exists) {
+    csrfTokens.delete(token); // One-time use
+  }
+  return exists;
+}
+
+// Clean up old tokens every 10 minutes
+setInterval(() => {
+  const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+  for (const [token, timestamp] of csrfTokens.entries()) {
+    if (timestamp < tenMinutesAgo) {
+      csrfTokens.delete(token);
+    }
+  }
+  // Warn if too many accumulated (potential issue)
+  if (csrfTokens.size > 100000) {
+    console.warn(`[SECURITY] High number of CSRF tokens in memory: ${csrfTokens.size}`);
+  }
+}, 10 * 60 * 1000);
 
 // ── Fix 6: Preview/link-preview bot detection ─────────────────────────────
 // Known bots that auto-fetch shared URLs (link previews). Receiving one of
@@ -140,15 +196,10 @@ function buildStoragePath(originalName) {
 
 // uploadToStorage, downloadFromStorage, removeFromStorage are imported from lib/r2.js
 
-async function sendOneTimeEncryptedFile(res, file) {
-  // For view-once mode, set expiry on first access (not on creation)
-  if (file.mode === "view-once" && !file.expiresAt) {
-    try {
-      await File.setExpiryOnFirstAccess(file.id);
-    } catch (err) {
-      console.error("Failed to set expiry on first access:", err.message);
-    }
-  }
+async function sendOneTimeEncryptedFile(res, file, bundleFiles = null) {
+
+  // If bundleFiles is provided, burn all files in the bundle
+  const filesToBurn = bundleFiles || [file];
 
   // Fix 1 — Atomic burn via Supabase RPC.
   // The burn_file() function does the expiry check AND the DELETE in a single
@@ -157,32 +208,48 @@ async function sendOneTimeEncryptedFile(res, file) {
   // any race loser (or an already-burned / expired link) gets 410.
   // Never reveal *why* the link is unavailable — all failure cases return the
   // same status and body.
-  const { data: burnData, error: burnError } = await supabase.rpc('burn_file', {
-    file_id: file.id,
-  });
-  if (burnError || !burnData || burnData.length === 0) {
+  const burnPromises = filesToBurn.map(f =>
+    supabase.rpc('burn_file', { file_id: f.id })
+  );
+  const burnResults = await Promise.all(burnPromises);
+
+  // Check if any burn succeeded (at least the first one)
+  const mainBurnData = burnResults[0].data;
+  if (burnResults[0].error || !mainBurnData || mainBurnData.length === 0) {
     return res.status(410).render("not-found");
   }
 
-  // Return a short-lived presigned GET URL so the browser downloads directly
-  // from R2. The Netlify function only handles this tiny JSON response
-  // (~500ms) regardless of file size — no more 26s timeout kills.
-  // A signed cleanup token lets the client tell us when to delete the R2 object.
+  // Return presigned GET URLs for all files in the bundle
   const PRESIGN_TTL = 5 * 60; // 5 minutes
-  let downloadUrl;
+  const downloadUrls = [];
+
   try {
-    downloadUrl = await getPresignedGetUrl(file.path, PRESIGN_TTL);
+    for (const f of filesToBurn) {
+      const downloadUrl = await getPresignedGetUrl(f.path, PRESIGN_TTL);
+      downloadUrls.push({
+        downloadUrl,
+        fileName: f.originalName,
+        storagePath: f.path,
+        cleanupToken: makeCleanupToken(f.path),
+      });
+    }
   } catch (err) {
-    await removeFromStorage(file.path).catch(() => {});
+    // Clean up any already-burned files
+    for (const f of filesToBurn) {
+      await removeFromStorage(f.path).catch(() => {});
+    }
     throw err;
   }
 
-  return res.json({
-    downloadUrl,
-    fileName: file.originalName,
-    storagePath: file.path,
-    cleanupToken: makeCleanupToken(file.path),
-  });
+  // Return single file format for backwards compatibility, or array for bundles
+  if (filesToBurn.length === 1) {
+    return res.json(downloadUrls[0]);
+  } else {
+    return res.json({
+      files: downloadUrls,
+      bundleSize: filesToBurn.length,
+    });
+  }
 }
 
 function getActiveLock(file) {
@@ -312,41 +379,17 @@ function resolvePublicDirectory() {
 
 app.use(express.static(resolvePublicDirectory()));
 
-// ── Security headers + CSP nonce ───────────────────────────────────────────
+// Enhanced CSP middleware with nonce support
+app.use(cspMiddleware);
+
+// Add Turnstile site key to locals
 app.use((req, res, next) => {
-  const nonce = crypto.randomBytes(16).toString("base64");
-  res.locals.cspNonce = nonce;
-
   res.locals.turnstileSiteKey = TURNSTILE_SITE_KEY;
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Referrer-Policy", "no-referrer");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
-  res.setHeader("X-XSS-Protection", "0"); // disabled — CSP is the correct defence
-  // Fix 3: Prevent cross-origin opener from accessing window.opener (key theft)
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-  res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
-  res.setHeader("Content-Security-Policy", [
-    "default-src 'none'",
-    `script-src 'self' 'nonce-${nonce}' https://cloud.umami.is https://challenges.cloudflare.com https://static.cloudflareinsights.com`,
-    "style-src 'unsafe-inline' https://fonts.googleapis.com https://challenges.cloudflare.com",
-    "img-src 'self' blob: data: https://api.producthunt.com",
-    "media-src 'self' blob:",
-    "font-src 'self' https://fonts.gstatic.com",
-    `connect-src 'self' https://cloud.umami.is https://api-gateway.umami.dev https://challenges.cloudflare.com${r2CspOrigin ? " " + r2CspOrigin : ""}`,
-    "frame-src blob: https://challenges.cloudflare.com",
-    "form-action 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-  ].join("; "));
-
-  if (req.secure || req.headers["x-forwarded-proto"] === "https") {
-    res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
-  }
-
   next();
 });
+
+// CSP violation reporting endpoint
+app.post("/api/csp-report", express.json({ type: "application/csp-report" }), cspReportHandler);
 
 // ── In-memory rate limiter (no external package needed) ────────────────────
 const _rlMap = new Map();
@@ -399,9 +442,13 @@ function rateLimit(maxRequests, windowMs) {
 }
 
 // ── UUID format validation — blocks DB lookup on garbage IDs ───────────────
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 app.param("id", (req, res, next, id) => {
-  if (!UUID_RE.test(id)) {
+  if (!validators.isValidUUID(id)) {
+    securityLog.log("INVALID_UUID_FORMAT", {
+      path: req.path,
+      providedId: id.substring(0, 20),
+      requestId: req.id,
+    });
     const wantsJson = req.method === "POST" || req.path.endsWith("/raw") || req.path.endsWith("/burn");
     return wantsJson
       ? res.status(404).json({ error: "Not found." })
@@ -458,6 +505,15 @@ app.post("/api/gateway-verify", async (req, res) => {
   const returnTo = (req.body.returnTo || "/").toString();
   const safeReturn = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
   return res.json({ ok: true, redirect: safeReturn });
+});
+
+// GET /api/csrf-token - Generate CSRF token for client-side requests
+app.get("/api/csrf-token", (req, res) => {
+  if (process.env.CSRF_TOKENS_ENABLED !== 'true') {
+    return res.status(404).json({ error: 'CSRF tokens disabled' });
+  }
+  const token = generateCsrfToken();
+  res.json({ token });
 });
 
 app.get("/", (req, res) => {
@@ -556,6 +612,24 @@ app.get("/health", async (req, res) => {
   }
 });
 
+// Security events endpoint (requires authentication)
+app.get("/api/security-events", async (req, res) => {
+  const healthToken = process.env.HEALTH_TOKEN || "";
+  const providedToken = (req.headers["authorization"] || "").replace(/^Bearer\s+/i, "");
+
+  if (!healthToken || providedToken !== healthToken) {
+    securityLog.log("UNAUTHORIZED_SECURITY_EVENTS_ACCESS", {
+      ip: req.ip,
+      path: req.path,
+    });
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+
+  const count = Math.min(Number(req.query.count || 100), 1000);
+  const events = securityLog.getEvents(count);
+  res.json({ events, total: events.length });
+});
+
 // ── QR Code generation endpoint ────────────────────────────────────────────
 app.get("/api/qr/:id", rateLimit(30, 60 * 1000), async (req, res) => {
   try {
@@ -617,11 +691,10 @@ app.get("/api/qr/:id", rateLimit(30, 60 * 1000), async (req, res) => {
   }
 });
 
+
 // ── Phase 2: presign + commit (direct browser → R2 upload, no Netlify 6MB cap) ──
 
 // Validates storagePath format to prevent path traversal on commit
-const STORAGE_PATH_RE = /^\d{4}-\d{2}-\d{2}\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}-[\w.\-]+$/i;
-const LINK_KEY_RE = /^[A-Za-z0-9_-]{43,88}$/; // base64url-encoded AES-256 key (32 bytes = 43 chars)
 
 // Step 1 — browser asks for a signed PUT URL
 // Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
@@ -644,69 +717,143 @@ app.get("/api/presign", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
 // Step 2 — browser calls this after it finishes the direct PUT to R2
 // Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
 app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
-  const { storagePath, originalName, mode: rawMode, password: rawPassword, linkKey: rawLinkKey, "cf-turnstile-response": turnstileToken } = req.body;
+  const { "cf-turnstile-response": turnstileToken } = req.body;
+  
+  // Determine if batch or single-file mode
+  const isBatchMode = Array.isArray(req.body.files);
+  const filesToProcess = isBatchMode ? req.body.files : [{
+    storagePath: req.body.storagePath,
+    originalName: req.body.originalName,
+    mode: req.body.mode,
+    password: req.body.password,
+    linkKey: req.body.linkKey,
+  }];
 
-  // Validate Turnstile token if configured
-  if (process.env.TURNSTILE_SECRET_KEY) {
-    if (!turnstileToken) {
-      return res.status(400).json({ error: "Bot verification failed. Please try again." });
+  if (!Array.isArray(filesToProcess) || filesToProcess.length === 0) {
+    return res.status(400).json({ error: "No files to process." });
+  }
+
+  if (filesToProcess.length > 100) {
+    return res.status(400).json({ error: "Too many files. Maximum 100 files per batch." });
+  }
+
+  // Early validation for all files (synchronous, fast)
+  for (let i = 0; i < filesToProcess.length; i++) {
+    const file = filesToProcess[i];
+    const { storagePath, originalName, mode: rawMode, password: rawPassword, linkKey: rawLinkKey } = file;
+
+    if (!storagePath || !validators.isValidStoragePath(storagePath)) {
+      securityLog.log("INVALID_STORAGE_PATH", {
+        path: req.path,
+        requestId: req.id,
+        fileIndex: i,
+      });
+      return res.status(400).json({ error: `Invalid storage path at file ${i + 1}.` });
     }
-    const turnstileOk = await verifyTurnstile(turnstileToken, req.socket?.remoteAddress);
-    if (!turnstileOk) {
+
+    if (rawLinkKey && !validators.isValidLinkKey(rawLinkKey)) {
+      securityLog.log("INVALID_LINK_KEY", {
+        path: req.path,
+        requestId: req.id,
+        fileIndex: i,
+      });
+      return res.status(400).json({ error: `Invalid link key at file ${i + 1}.` });
+    }
+
+    if (rawPassword && !isValidPassword(rawPassword)) {
+      return res.status(400).json({ error: `Invalid password at file ${i + 1}. Must be 4-255 characters without spaces.` });
+    }
+  }
+
+  // Turnstile token check (once for batch)
+  if (process.env.TURNSTILE_SECRET_KEY && !turnstileToken) {
+    return res.status(400).json({ error: "Bot verification failed. Please try again." });
+  }
+
+  try {
+    // Verify Turnstile once (if configured)
+    const turnstileOk = process.env.TURNSTILE_SECRET_KEY 
+      ? await verifyTurnstile(turnstileToken, req.socket?.remoteAddress)
+      : true;
+
+    if (process.env.TURNSTILE_SECRET_KEY && !turnstileOk) {
       return res.status(403).json({ error: "Bot verification failed. Please try again." });
     }
-  }
 
-  if (!storagePath || !STORAGE_PATH_RE.test(storagePath)) {
-    return res.status(400).json({ error: "Invalid storage path." });
-  }
+    // Generate bundle_id for batch uploads (multiple files share same bundle_id)
+    const bundleId = isBatchMode && filesToProcess.length > 1 ? crypto.randomUUID() : null;
 
-  if (rawLinkKey && !LINK_KEY_RE.test(rawLinkKey)) {
-    return res.status(400).json({ error: "Invalid link key." });
-  }
+    // Process all files in parallel
+    const fileCreationPromises = filesToProcess.map(async (file, idx) => {
+      const { storagePath, originalName, mode: rawMode, password: rawPassword, linkKey: rawLinkKey } = file;
+      
+      const originalNameClean = (originalName || "file").toString().trim().slice(0, 255);
+      const mode = (rawMode === "view-once" || rawMode === "download") ? rawMode : "download";
 
-  if (passwordHasWhitespace(rawPassword)) {
-    return res.status(400).json({ error: "Passwords cannot contain spaces." });
-  }
+      try {
+        // Verify file exists and has valid FSE1 magic header + create DB record in parallel
+        const [firstBytes, fileRecord] = await Promise.all([
+          getFirstBytes(storagePath, 4),
+          File.createFile({
+            path: storagePath,
+            originalName: originalNameClean,
+            password: rawPassword || undefined,
+            mode,
+            linkKey: rawLinkKey || null,
+            bundleId: bundleId,
+          }),
+        ]);
 
-  const originalNameClean = (originalName || "file").toString().trim().slice(0, 255);
-  const mode = (rawMode === "view-once" || rawMode === "download") ? rawMode : "download";
+        // Validate FSE1 magic header
+        if (
+          firstBytes.length < 4 ||
+          firstBytes[0] !== 70 ||
+          firstBytes[1] !== 83 ||
+          firstBytes[2] !== 69 ||
+          firstBytes[3] !== 49
+        ) {
+          await removeFromStorage(storagePath).catch(() => {});
+          throw new Error(`Invalid payload at file ${idx + 1}. File must be encrypted client-side before upload.`);
+        }
 
-  // Verify the file actually landed in R2 and validate FSE1 magic header
-  let firstBytes;
-  try {
-    firstBytes = await getFirstBytes(storagePath, 4);
-  } catch (err) {
-    return res.status(400).json({ error: "Upload not found in storage. Please try uploading again." });
-  }
+        securityLog.log("FILE_CREATED", {
+          fileId: fileRecord.id,
+          bundleId: bundleId,
+          ip: req.ip,
+          mode,
+          hasPassword: Boolean(rawPassword),
+          hasLinkKey: Boolean(rawLinkKey),
+          requestId: req.id,
+          fileIndex: idx,
+          batchMode: isBatchMode,
+        });
 
-  if (
-    firstBytes.length < 4 ||
-    firstBytes[0] !== 70 ||
-    firstBytes[1] !== 83 ||
-    firstBytes[2] !== 69 ||
-    firstBytes[3] !== 49
-  ) {
-    await removeFromStorage(storagePath).catch(() => {});
-    return res.status(400).json({ error: "Invalid payload. File must be encrypted client-side before upload." });
-  }
-
-  try {
-    const file = await File.createFile({
-      path: storagePath,
-      originalName: originalNameClean,
-      password: rawPassword || undefined,
-      mode,
-      linkKey: rawLinkKey || null,
+        return fileRecord.id;
+      } catch (err) {
+        console.error(`File creation error at index ${idx}:`, err.message);
+        await removeFromStorage(file.storagePath).catch(() => {});
+        throw new Error(`Failed to process file ${idx + 1}: ${err.message}`);
+      }
     });
 
-    const shareBaseUrl = getShareBaseUrl(req);
+    const fileIds = await Promise.all(fileCreationPromises);
 
-    return res.status(201).json({ id: file.id, baseUrl: shareBaseUrl });
+    const shareBaseUrl = getShareBaseUrl(req);
+    
+    // Return single ID for backwards compatibility, or array of IDs for batch
+    if (isBatchMode) {
+      return res.status(201).json({ ids: fileIds, baseUrl: shareBaseUrl, bundleId: bundleId });
+    } else {
+      return res.status(201).json({ id: fileIds[0], baseUrl: shareBaseUrl });
+    }
   } catch (err) {
     console.error("Commit error:", err.message);
-    await removeFromStorage(storagePath).catch(() => {});
-    return res.status(500).json({ error: "Upload failed. Please try again." });
+    
+    if (err.message && err.message.includes("NoSuchKey")) {
+      return res.status(400).json({ error: "One or more files not found in storage. Please try uploading again." });
+    }
+    
+    return res.status(500).json({ error: err.message || "Upload failed. Please try again." });
   }
 });
 
@@ -715,7 +862,11 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
 // the R2 object immediately. This is a fast operation — no size/timeout risk.
 app.post("/api/r2-cleanup", rateLimit(60, 60 * 1000), async (req, res) => {
   const { storagePath, cleanupToken } = req.body;
-  if (!storagePath || !STORAGE_PATH_RE.test(storagePath) || !cleanupToken) {
+  if (!storagePath || !validators.isValidStoragePath(storagePath) || !cleanupToken) {
+    securityLog.log("INVALID_CLEANUP_REQUEST", {
+      path: req.path,
+      requestId: req.id,
+    });
     return res.status(400).json({ ok: false, error: "Invalid request." });
   }
   const expected = makeCleanupToken(storagePath);
@@ -740,18 +891,7 @@ app.post("/api/upload", dbRateLimit(10, 10 * 60 * 1000), upload.single("file"), 
   let storagePath = null;
 
   try {
-    // Validate Turnstile token if configured
-    if (process.env.TURNSTILE_SECRET_KEY) {
-      const turnstileToken = (req.body["cf-turnstile-response"] || "").toString();
-      if (!turnstileToken) {
-        return res.status(400).json({ error: "Bot verification failed. Please try again." });
-      }
-      const turnstileOk = await verifyTurnstile(turnstileToken, req.socket?.remoteAddress);
-      if (!turnstileOk) {
-        return res.status(403).json({ error: "Bot verification failed. Please try again." });
-      }
-    }
-
+    // Early validation (fast, synchronous)
     if (!req.file) {
       return res.status(400).json({
         error: "Please choose a file to upload.",
@@ -760,14 +900,20 @@ app.post("/api/upload", dbRateLimit(10, 10 * 60 * 1000), upload.single("file"), 
 
     const originalName = (req.body.originalName?.trim() || req.file.originalname || "file").slice(0, 255);
     const rawPassword = (req.body.password || "").toString();
-    if (passwordHasWhitespace(rawPassword)) {
-      return res.status(400).json({ error: "Passwords cannot contain spaces." });
+    if (rawPassword && !isValidPassword(rawPassword)) {
+      securityLog.log("INVALID_PASSWORD_FORMAT", {
+        path: req.path,
+        requestId: req.id,
+      });
+      return res.status(400).json({ error: "Invalid password. Must be 4-255 characters without spaces." });
     }
+
     // Whitelist mode — reject anything not in the allowed set
     const rawMode = req.body.mode?.trim() || "";
     const mode = (rawMode === "view-once" || rawMode === "download") ? rawMode : "download";
     const payload = req.file.buffer;
 
+    // Validate payload magic header (synchronous)
     if (
       payload.length < 8 ||
       payload[0] !== 70 ||
@@ -781,13 +927,46 @@ app.post("/api/upload", dbRateLimit(10, 10 * 60 * 1000), upload.single("file"), 
     }
 
     storagePath = buildStoragePath(originalName);
-    await uploadToStorage(storagePath, payload);
+    const turnstileToken = (req.body["cf-turnstile-response"] || "").toString();
 
-    const file = await File.createFile({
-      path: storagePath,
-      originalName,
-      password: rawPassword || undefined,
+    // Parallelize: Turnstile verification + R2 upload + DB file creation
+    // These are all independent I/O operations
+    const [turnstileOk, , file] = await Promise.all([
+      // 1. Verify Turnstile (if configured)
+      process.env.TURNSTILE_SECRET_KEY
+        ? (turnstileToken ? verifyTurnstile(turnstileToken, req.socket?.remoteAddress) : Promise.resolve(false))
+        : Promise.resolve(true),
+      
+      // 2. Upload to R2
+      uploadToStorage(storagePath, payload),
+      
+      // 3. Create file record in DB (happens in parallel with Turnstile & upload)
+      File.createFile({
+        path: storagePath,
+        originalName,
+        password: rawPassword || undefined,
+        mode,
+      }),
+    ]);
+
+    // Check Turnstile result
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      if (!turnstileToken) {
+        await removeFromStorage(storagePath).catch(() => {});
+        return res.status(400).json({ error: "Bot verification failed. Please try again." });
+      }
+      if (!turnstileOk) {
+        await removeFromStorage(storagePath).catch(() => {});
+        return res.status(403).json({ error: "Bot verification failed. Please try again." });
+      }
+    }
+
+    securityLog.log("FILE_CREATED", {
+      fileId: file.id,
+      ip: req.ip,
       mode,
+      hasPassword: Boolean(rawPassword),
+      requestId: req.id,
     });
 
     const shareBaseUrl = getShareBaseUrl(req);
@@ -798,7 +977,7 @@ app.post("/api/upload", dbRateLimit(10, 10 * 60 * 1000), upload.single("file"), 
     });
   } catch (error) {
     if (storagePath) {
-      await removeFromStorage(storagePath);
+      await removeFromStorage(storagePath).catch(() => {});
     }
 
     const errMsg = error?.message || String(error);
@@ -819,9 +998,18 @@ app.get("/s/:id", async (req, res) => {
   try {
     const file = await File.findById(req.params.id);
     if (!file) return res.status(404).render("not-found");
+    
+    // If file is part of a bundle, fetch all files in the bundle
+    let bundleFiles = [file];
+    if (file.bundleId) {
+      bundleFiles = await File.findByBundleId(file.bundleId);
+    }
+    
     return res.render("password", {
       error: null,
       fileId: file.id,
+      bundleId: file.bundleId || null,
+      bundleFiles: bundleFiles,
       requiresPassword: Boolean(file.password),
       mode: file.mode || "download",
       linkKey: file.linkKey || null,
@@ -841,20 +1029,37 @@ app.get("/s/:id/raw", rateLimit(15, 60 * 1000), async (req, res) => {
     const file = await File.findById(req.params.id);
     if (!file) return res.status(404).render("not-found");
     if (file.password) return res.status(401).json({ error: "Password required." });
-    return sendOneTimeEncryptedFile(res, file);
+    // If no password, check for bundle and pass all files
+    let bundleFiles = null;
+    if (file.bundleId) {
+      bundleFiles = await File.findByBundleId(file.bundleId);
+    }
+    return sendOneTimeEncryptedFile(res, file, bundleFiles);
   } catch (error) {
     return res.status(400).json({ error: "Failed to download file." });
   }
 });
 
-app.post("/s/:id/raw", dbRateLimit(20, 60 * 1000), async (req, res) => {
+app.post("/s/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, async (req, res) => {
   try {
     const file = await File.findById(req.params.id);
     if (!file) return res.status(404).json({ error: "File not found." });
-    if (!file.password) return sendOneTimeEncryptedFile(res, file);
+    if (!file.password) {
+      // If no password, check for bundle and pass all files
+      let bundleFiles = null;
+      if (file.bundleId) {
+        bundleFiles = await File.findByBundleId(file.bundleId);
+      }
+      return sendOneTimeEncryptedFile(res, file, bundleFiles);
+    }
     const activeLockUntilMs = getActiveLock(file);
     if (activeLockUntilMs) {
       const remainingMinutes = Math.ceil((activeLockUntilMs - Date.now()) / 60000);
+      securityLog.log("FILE_ACCESS_LOCKED", {
+        fileId: file.id,
+        ip: req.ip,
+        requestId: req.id,
+      });
       return res.status(423).json({ error: `File is locked. Try again in ${remainingMinutes} minute(s).` });
     }
     const submittedPassword = req.body.password || "";
@@ -864,14 +1069,36 @@ app.post("/s/:id/raw", dbRateLimit(20, 60 * 1000), async (req, res) => {
       if (nextFailedAttempts >= PASSWORD_MAX_ATTEMPTS) {
         const lockUntil = new Date(Date.now() + PASSWORD_LOCK_MINUTES * 60 * 1000).toISOString();
         await File.updateLockState(file.id, 0, lockUntil);
+        securityLog.log("FILE_PASSWORD_LOCK", {
+          fileId: file.id,
+          ip: req.ip,
+          attempts: nextFailedAttempts,
+          requestId: req.id,
+        });
         return res.status(423).json({ error: `Too many wrong passwords. File locked for ${PASSWORD_LOCK_MINUTES} minutes.` });
       }
       await File.updateLockState(file.id, nextFailedAttempts, null);
+      securityLog.log("FILE_PASSWORD_WRONG", {
+        fileId: file.id,
+        ip: req.ip,
+        attempts: nextFailedAttempts,
+        requestId: req.id,
+      });
       const remaining = PASSWORD_MAX_ATTEMPTS - nextFailedAttempts;
       return res.status(401).json({ error: `Wrong password. ${remaining} attempt(s) left before lock.` });
     }
     await File.updateLockState(file.id, 0, null);
-    return sendOneTimeEncryptedFile(res, file);
+    securityLog.log("FILE_PASSWORD_SUCCESS", {
+      fileId: file.id,
+      ip: req.ip,
+      requestId: req.id,
+    });
+    // If password-protected, check for bundle and pass all files
+    let bundleFiles = null;
+    if (file.bundleId) {
+      bundleFiles = await File.findByBundleId(file.bundleId);
+    }
+    return sendOneTimeEncryptedFile(res, file, bundleFiles);
   } catch (error) {
     return res.status(400).json({ error: "Failed to verify password." });
   }
@@ -881,12 +1108,26 @@ app.post("/s/:id/burn", rateLimit(10, 60 * 1000), async (req, res) => {
   const id = req.params.id;
   const referer = req.headers["referer"] || req.headers["origin"] || "";
   const host = (req.headers["x-forwarded-host"] || req.headers["host"] || "").split(":")[0];
-  if (referer && !referer.includes(host)) return res.status(403).json({ ok: false, error: "Forbidden." });
+  if (referer && !referer.includes(host)) {
+    securityLog.log("BURN_CSRF_REJECTION", {
+      fileId: id,
+      ip: req.ip,
+      referer,
+      host,
+      requestId: req.id,
+    });
+    return res.status(403).json({ ok: false, error: "Forbidden." });
+  }
   try {
     const file = await File.findById(id);
     if (!file) return res.json({ ok: true, alreadyGone: true });
     await File.deleteById(file.id);
     await removeFromStorage(file.path);
+    securityLog.log("FILE_BURNED", {
+      fileId: id,
+      ip: req.ip,
+      requestId: req.id,
+    });
     console.log(`[burn] Completed id=${id}`);
     return res.json({ ok: true });
   } catch (error) {
@@ -930,7 +1171,23 @@ app.get("/file/:id/raw", rateLimit(15, 60 * 1000), async (req, res) => {
   }
 });
 
-app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), async (req, res) => {
+// Middleware to validate CSRF tokens on password submissions
+function csrfProtectionMiddleware(req, res, next) {
+  if (process.env.CSRF_TOKENS_ENABLED === 'true' && req.body && req.body.password) {
+    const token = req.body.csrfToken || req.headers['x-csrf-token'];
+    if (!validateCsrfToken(token)) {
+      securityLog.log('CSRF_TOKEN_INVALID', {
+        endpoint: req.path,
+        ip: req.ip,
+        requestId: req.id,
+      });
+      return res.status(403).json({ error: 'Invalid or missing CSRF token' });
+    }
+  }
+  next();
+}
+
+app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, async (req, res) => {
   try {
     const file = await File.findById(req.params.id);
 
@@ -945,6 +1202,11 @@ app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), async (req, res) => {
     const activeLockUntilMs = getActiveLock(file);
     if (activeLockUntilMs) {
       const remainingMinutes = Math.ceil((activeLockUntilMs - Date.now()) / 60000);
+      securityLog.log("FILE_ACCESS_LOCKED", {
+        fileId: file.id,
+        ip: req.ip,
+        requestId: req.id,
+      });
       return res.status(423).json({
         error: `File is locked. Try again in ${remainingMinutes} minute(s).`,
       });
@@ -960,13 +1222,24 @@ app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), async (req, res) => {
           Date.now() + PASSWORD_LOCK_MINUTES * 60 * 1000
         ).toISOString();
         await File.updateLockState(file.id, 0, lockUntil);
-
+        securityLog.log("FILE_PASSWORD_LOCK", {
+          fileId: file.id,
+          ip: req.ip,
+          attempts: nextFailedAttempts,
+          requestId: req.id,
+        });
         return res.status(423).json({
           error: `Too many wrong passwords. File locked for ${PASSWORD_LOCK_MINUTES} minutes.`,
         });
       }
 
       await File.updateLockState(file.id, nextFailedAttempts, null);
+      securityLog.log("FILE_PASSWORD_WRONG", {
+        fileId: file.id,
+        ip: req.ip,
+        attempts: nextFailedAttempts,
+        requestId: req.id,
+      });
       const remaining = PASSWORD_MAX_ATTEMPTS - nextFailedAttempts;
       return res.status(401).json({
         error: `Wrong password. ${remaining} attempt(s) left before lock.`,
@@ -974,6 +1247,11 @@ app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), async (req, res) => {
     }
 
     await File.updateLockState(file.id, 0, null);
+    securityLog.log("FILE_PASSWORD_SUCCESS", {
+      fileId: file.id,
+      ip: req.ip,
+      requestId: req.id,
+    });
     return sendOneTimeEncryptedFile(res, file);
   } catch (error) {
     return res.status(400).json({
@@ -992,6 +1270,13 @@ app.post("/file/:id/burn", rateLimit(10, 60 * 1000), async (req, res) => {
   const referer = req.headers["referer"] || req.headers["origin"] || "";
   const host = (req.headers["x-forwarded-host"] || req.headers["host"] || "").split(":")[0];
   if (referer && !referer.includes(host)) {
+    securityLog.log("BURN_CSRF_REJECTION", {
+      fileId: id,
+      ip: req.ip,
+      referer,
+      host,
+      requestId: req.id,
+    });
     return res.status(403).json({ ok: false, error: "Forbidden." });
   }
 
@@ -1004,6 +1289,11 @@ app.post("/file/:id/burn", rateLimit(10, 60 * 1000), async (req, res) => {
     }
     await File.deleteById(file.id);
     await removeFromStorage(file.path);
+    securityLog.log("FILE_BURNED", {
+      fileId: id,
+      ip: req.ip,
+      requestId: req.id,
+    });
     console.log(`[burn] Completed id=${id}`);
     return res.json({ ok: true });
   } catch (error) {

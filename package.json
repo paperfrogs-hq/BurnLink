@@ -1,6 +1,6 @@
 {
   "name": "burnlink",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Privacy-first file sharing with end-to-end encryption",
   "main": "server.js",
   "scripts": {
@@ -17,7 +17,7 @@
     "aes-gcm",
     "one-time-links"
   ],
-  "author": "Joy Majumdar",
+  "author": "Joy G. Majumdar",
   "repository": {
     "type": "git",
     "url": "https://github.com/Joy-Majumder/BurnLink.git"
@@ -35,10 +35,13 @@
     "dotenv": "^16.4.5",
     "ejs": "^3.1.10",
     "express": "^4.19.2",
+    "helmet": "^7.1.0",
     "jimp": "^1.6.1",
     "multer": "^1.4.5-lts.1",
+    "nodemailer": "^8.0.5",
     "qrcode": "^1.5.3",
-    "serverless-http": "^3.2.0"
+    "serverless-http": "^3.2.0",
+    "validator": "^13.11.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

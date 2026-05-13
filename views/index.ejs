@@ -238,6 +238,7 @@
     #share-link { display: block; word-break: break-all; padding: 0.85rem 1rem; background: #111; border: 1px solid #222; margin-bottom: 1rem; color: #eb583d; text-decoration: none; font-family: "Monaco", "Courier New", monospace; font-size: 0.8rem; }
     .link-actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
     #copy-link-btn { width: auto; padding: 0.7rem 1.25rem; }
+    #share-btn { width: auto; padding: 0.7rem 1.25rem; }
     #qr-btn { width: auto; padding: 0.7rem 1.25rem; }
     .status { font-size: 0.8rem; color: #eb583d; font-weight: 500; }
     .status.error { color: #ff6b6b; }
@@ -369,10 +370,12 @@
             <div class="form-group">
               <div id="drag-drop-zone" class="drag-drop-zone">
                 <div class="drag-drop-icon"></div>
-                <div class="drag-drop-text">Drag and drop your file here</div>
+                <div class="drag-drop-text">Drag and drop files here</div>
                 <div class="drag-drop-hint">or click to browse</div>
               </div>
-              <input type="file" id="file" name="file" required hidden />
+              <input type="file" id="file" name="file" required hidden multiple />
+              <div id="file-list-container" style="display: none; margin-top: 1rem; max-height: 200px; overflow-y: auto; border: 1px solid #1e1e1e; border-radius: 2px; padding: 0.75rem 0;">
+              </div>
             </div>
 
             <div id="progress-container" class="progress-container">
@@ -391,6 +394,7 @@
                 <button id="password-toggle" class="password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
               </div>
             </div>
+
             <div class="form-group">
               <label>Share mode</label>
               <div style="display: flex; gap: 0.75rem;">
@@ -417,6 +421,7 @@
             <a id="share-link" href="#"></a>
             <div class="link-actions">
               <button id="copy-link-btn" type="button">Copy link</button>
+              <button id="share-btn" type="button" style="display: none;">Share</button>
               <button id="qr-btn" type="button">Share QR</button>
               <span id="copy-status" class="status" aria-live="polite"></span>
             </div>

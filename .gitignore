@@ -4,3 +4,5 @@ uploads
 .netlify # deprecated, now using Vercel
 .vercel
 .env.example
+.env.example.local
+# Ignore all log files

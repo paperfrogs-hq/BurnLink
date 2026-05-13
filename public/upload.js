@@ -23,6 +23,7 @@
   var toastContainer = document.getElementById("toast-container");
 
   var currentFileId = null;
+  var fileListContainer = document.getElementById("file-list-container");
 
   // ── Toast Notification System ──
   function showToast(message, type) {
@@ -91,13 +92,82 @@
 
   function handleFileSelected() {
     if (fileInput.files && fileInput.files.length > 0) {
-      var file = fileInput.files[0];
-      var sizeInMB = (file.size / 1024 / 1024).toFixed(2);
-      dragDropZone.innerHTML = '<div class="drag-drop-text">' + file.name + '</div><div class="drag-drop-hint">' + sizeInMB + ' MB</div>';
+      var totalSize = 0;
+      var fileList = Array.from(fileInput.files);
+      
+      // Validate file sizes
+      for (var i = 0; i < fileList.length; i++) {
+        totalSize += fileList[i].size;
+      }
+      
+      var MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024;
+      if (totalSize > MAX_UPLOAD_BYTES) {
+        setError("Files too large. Total maximum upload size is 1 GB.");
+        fileInput.value = "";
+        return;
+      }
+      
+      // Update drag-drop zone text
+      if (fileList.length === 1) {
+        dragDropZone.innerHTML = '<div class="drag-drop-text">' + fileList[0].name + '</div><div class="drag-drop-hint">' + (fileList[0].size / 1024 / 1024).toFixed(2) + ' MB</div>';
+      } else {
+        var totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+        dragDropZone.innerHTML = '<div class="drag-drop-text">' + fileList.length + ' files selected</div><div class="drag-drop-hint">' + totalSizeMB + ' MB total</div>';
+      }
       dragDropZone.style.borderColor = '#28a745';
       dragDropZone.style.background = '#0a2a1a';
-      setStatus("File selected: " + file.name);
+      
+      // Display file list
+      renderFileList(fileList);
+      setStatus("Files selected: " + fileList.length);
     }
+  }
+  
+  function renderFileList(fileList) {
+    fileListContainer.innerHTML = '';
+    if (fileList.length === 0) {
+      fileListContainer.style.display = 'none';
+      return;
+    }
+    
+    fileListContainer.style.display = 'block';
+    for (var i = 0; i < fileList.length; i++) {
+      var file = fileList[i];
+      var sizeInMB = (file.size / 1024 / 1024).toFixed(2);
+      var fileItem = document.createElement('div');
+      fileItem.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; border-bottom: 1px solid #0f0f0f; font-size: 0.8rem; color: #aaa;';
+      
+      var fileInfo = document.createElement('span');
+      fileInfo.style.cssText = 'overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;';
+      fileInfo.textContent = file.name + ' (' + sizeInMB + ' MB)';
+      
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.textContent = '✕';
+      removeBtn.style.cssText = 'background: transparent; border: none; color: #666; cursor: pointer; padding: 0.25rem 0.5rem; font-size: 1rem; margin-left: 0.5rem;';
+      removeBtn.setAttribute('data-index', i);
+      removeBtn.onclick = function(e) {
+        e.preventDefault();
+        removeFileFromList(parseInt(this.getAttribute('data-index')));
+      };
+      removeBtn.onmouseover = function() { this.style.color = '#eb583d'; };
+      removeBtn.onmouseout = function() { this.style.color = '#666'; };
+      
+      fileItem.appendChild(fileInfo);
+      fileItem.appendChild(removeBtn);
+      fileListContainer.appendChild(fileItem);
+    }
+  }
+  
+  function removeFileFromList(index) {
+    var dt = new DataTransfer();
+    var fileList = Array.from(fileInput.files);
+    fileList.splice(index, 1);
+    fileList.forEach(function(file) {
+      dt.items.add(file);
+    });
+    fileInput.files = dt.files;
+    handleFileSelected();
   }
 
   // ── Progress Indicator ──
@@ -341,20 +411,26 @@
   async function handleSubmit(event) {
     event.preventDefault();
     statusEl.classList.remove("error");
-    setStatus("Preparing file...");
+    setStatus("Preparing files...");
     uploadBtn.disabled = true;
 
     try {
       if (!fileInput.files || fileInput.files.length === 0) {
-        setError("Please select a file.");
+        setError("Please select at least one file.");
         uploadBtn.disabled = false;
         return;
       }
 
-      var file = fileInput.files[0];
+      var fileList = Array.from(fileInput.files);
       var MAX_UPLOAD_BYTES = 1 * 1024 * 1024 * 1024;
-      if (file.size > MAX_UPLOAD_BYTES) {
-        setError("File too large. Maximum upload size is 1 GB.");
+      var totalSize = 0;
+      
+      for (var fi = 0; fi < fileList.length; fi++) {
+        totalSize += fileList[fi].size;
+      }
+      
+      if (totalSize > MAX_UPLOAD_BYTES) {
+        setError("Files too large. Total maximum upload size is 1 GB.");
         uploadBtn.disabled = false;
         return;
       }
@@ -368,8 +444,6 @@
         }
       }
 
-      var fileData = await file.arrayBuffer();
-      var fileDataBytes = new Uint8Array(fileData);
       var userPassword = passwordInput.value;
 
       if (hasWhitespace(userPassword)) {
@@ -378,109 +452,152 @@
         return;
       }
 
-      var encryptedPayload;
-      var linkKey = null;
       var hasPassword = Boolean(userPassword);
+      var serverToken = userPassword ? await deriveServerToken(userPassword) : null;
+      var fileDataArray = [];
 
-      setStatus("Encrypting file in your browser...");
+      setStatus("Encrypting " + fileList.length + " file(s) in your browser...");
 
-      if (hasPassword) {
-        encryptedPayload = await encryptFileWithPassword(fileDataBytes, userPassword);
-      } else {
-        var result = await encryptFileWithLink(fileDataBytes);
-        encryptedPayload = result.envelope;
-        linkKey = result.linkKey;
-      }
+      // Step 1: Encrypt all files in parallel
+      var encryptPromises = fileList.map(async function(file) {
+        var fileData = await file.arrayBuffer();
+        var fileDataBytes = new Uint8Array(fileData);
+        var encryptedPayload;
+        var linkKey = null;
 
-      setStatus("Preparing secure upload...");
-      var presignRes = await fetch("/api/presign?" + new URLSearchParams({ filename: file.name, filesize: file.size }));
-      if (!presignRes.ok) throw new Error("Could not get upload URL. Please try again.");
-      var presignData = await presignRes.json();
+        if (hasPassword) {
+          encryptedPayload = await encryptFileWithPassword(fileDataBytes, userPassword);
+        } else {
+          var result = await encryptFileWithLink(fileDataBytes);
+          encryptedPayload = result.envelope;
+          linkKey = result.linkKey;
+        }
+
+        return {
+          file: file,
+          encryptedPayload: encryptedPayload,
+          linkKey: linkKey,
+        };
+      });
+
+      fileDataArray = await Promise.all(encryptPromises);
+
+      setStatus("Preparing secure upload for " + fileList.length + " file(s)...");
+
+      // Step 2: Get presigned URLs for all files in parallel
+      var presignPromises = fileDataArray.map(function(item) {
+        return fetch("/api/presign?" + new URLSearchParams({ 
+          filename: item.file.name, 
+          filesize: item.file.size 
+        })).then(function(res) {
+          if (!res.ok) throw new Error("Could not get upload URL for " + item.file.name);
+          return res.json();
+        });
+      });
+
+      var presignDataArray = await Promise.all(presignPromises);
 
       showProgress();
-      setStatus("Uploading encrypted file...");
+      setStatus("Uploading " + fileList.length + " encrypted file(s)...");
 
-      var blob = new Blob([encryptedPayload]);
-      var xhr = new XMLHttpRequest();
+      // Step 3: Upload all files in parallel
+      var uploadPromises = fileDataArray.map(function(item, idx) {
+        return new Promise(function(resolve, reject) {
+          var blob = new Blob([item.encryptedPayload]);
+          var xhr = new XMLHttpRequest();
+          var presignData = presignDataArray[idx];
 
-      xhr.upload.addEventListener("progress", function(e) {
-        if (e.lengthComputable) {
-          var percent = Math.round((e.loaded / e.total) * 100);
-          updateProgress(percent);
-          setStatus("Uploading... " + percent + "%");
-        }
-      });
-
-      xhr.addEventListener("load", async function() {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setStatus("Finalizing...");
-          hideProgress();
-
-          var serverToken = userPassword ? await deriveServerToken(userPassword) : null;
-          var commitPayload = {
-            storagePath: presignData.storagePath,
-            originalName: file.name,
-            mode: selectedMode,
-          };
-          if (serverToken) commitPayload.password = serverToken;
-          if (linkKey) commitPayload.linkKey = toBase64Url(linkKey);
-
-          var turnstileToken = getTurnstileToken();
-          if (turnstileToken) {
-            commitPayload["cf-turnstile-response"] = turnstileToken;
-          }
-
-          var commitRes = await fetch("/api/commit", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(commitPayload),
+          xhr.addEventListener("load", function() {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve({ presignData: presignData, item: item });
+            } else {
+              reject(new Error("Upload to storage failed (HTTP " + xhr.status + ") for " + item.file.name));
+            }
           });
 
-          if (!commitRes.ok) {
-            var message = "Upload failed. Please try again.";
-            try {
-              var errorBody = await commitRes.json();
-              if (errorBody && errorBody.error) message = errorBody.error;
-            } catch (e) {}
-            throw new Error(message);
+          xhr.addEventListener("error", function() {
+            reject(new Error("Upload blocked (CORS or network error) for " + item.file.name));
+          });
+
+          xhr.addEventListener("abort", function() {
+            reject(new Error("Upload cancelled for " + item.file.name));
+          });
+
+          xhr.open("PUT", presignData.uploadUrl);
+          xhr.send(blob);
+        });
+      });
+
+      var uploadResults = await Promise.all(uploadPromises);
+
+      setStatus("Finalizing batch upload...");
+      hideProgress();
+
+      // Step 4: Commit all files in batch
+      var commitPayloads = uploadResults.map(function(result) {
+        var payload = {
+          storagePath: result.presignData.storagePath,
+          originalName: result.item.file.name,
+          mode: selectedMode,
+        };
+        
+        if (serverToken) payload.password = serverToken;
+        if (result.item.linkKey) payload.linkKey = toBase64Url(result.item.linkKey);
+        
+        return payload;
+      });
+
+      var batchCommitPayload = {
+        files: commitPayloads,
+      };
+
+      var turnstileToken = getTurnstileToken();
+      if (turnstileToken) {
+        batchCommitPayload["cf-turnstile-response"] = turnstileToken;
+      }
+
+      var commitRes = await fetch("/api/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(batchCommitPayload),
+      });
+
+      if (!commitRes.ok) {
+        var message = "Upload failed. Please try again.";
+        try {
+          var errorBody = await commitRes.json();
+          if (errorBody && errorBody.error) message = errorBody.error;
+        } catch (e) {}
+        throw new Error(message);
+      }
+
+      var commitData = await commitRes.json();
+      
+      // Store link keys in session storage
+      if (commitData.ids && commitData.ids.length > 0) {
+        for (var fIdx = 0; fIdx < uploadResults.length; fIdx++) {
+          if (uploadResults[fIdx].item.linkKey) {
+            sessionStorage.setItem("__fse_link_key_" + commitData.ids[fIdx], toBase64Url(uploadResults[fIdx].item.linkKey));
           }
-
-          var commitData = await commitRes.json();
-          if (linkKey) {
-            sessionStorage.setItem("__fse_link_key_" + commitData.id, toBase64Url(linkKey));
-          }
-
-          showLinkBox(commitData.id, commitData.baseUrl, hasPassword);
-          setStatus("File successfully uploaded!");
-          showToast("File has been uploaded! Your secure link is ready to share.", "success");
-          resetTurnstile();
-
-          fileInput.value = "";
-          passwordInput.value = "";
-          dragDropZone.innerHTML = '<div class="drag-drop-text">Drag and drop your file here</div><div class="drag-drop-hint">or click to browse</div>';
-          dragDropZone.style.borderColor = '#2a2a2a';
-          dragDropZone.style.background = '#0f0f0f';
-        } else {
-          throw new Error("Upload to storage failed (HTTP " + xhr.status + "). Please try again.");
         }
-      });
+      }
 
-      xhr.addEventListener("error", function() {
-        hideProgress();
-        throw new Error("Upload blocked (CORS or network error).");
-      });
+      // Use first file ID as primary share link
+      showLinkBox(commitData.ids[0], commitData.baseUrl, hasPassword);
+      setStatus("All files successfully uploaded!");
+      showToast(fileList.length + " file(s) uploaded! Your secure link is ready to share.", "success");
+      resetTurnstile();
 
-      xhr.addEventListener("abort", function() {
-        hideProgress();
-        throw new Error("Upload cancelled.");
-      });
-
-      xhr.open("PUT", presignData.uploadUrl);
-      xhr.send(blob);
-
+      fileInput.value = "";
+      passwordInput.value = "";
+      dragDropZone.innerHTML = '<div class="drag-drop-text">Drag and drop files here</div><div class="drag-drop-hint">or click to browse</div>';
+      dragDropZone.style.borderColor = '#2a2a2a';
+      dragDropZone.style.background = '#0f0f0f';
+      fileListContainer.innerHTML = '';
+      fileListContainer.style.display = 'none';
     } catch (error) {
       hideProgress();
-      setError(error.message || "Failed to upload file.");
+      setError(error.message || "Failed to upload files.");
       showToast(error.message || "Failed to upload", "error");
       resetTurnstile();
     } finally {
@@ -490,7 +607,7 @@
 
   async function handleCopyLink(event) {
     event.preventDefault();
-    var linkUrl = shareLinkEl.href;
+    var linkUrl = shareLinkEl.textContent;
 
     try {
       await navigator.clipboard.writeText(linkUrl);
