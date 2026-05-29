@@ -214,7 +214,7 @@ router.post("/admin/test-token", (req, res) => {
   if (!adminToken) {
     console.log("   ❌ FAIL: BLOG_ADMIN_TOKEN not set in .env\n");
     return res.status(500).json({ 
-      error: "Server Error: BLOG_ADMIN_TOKEN not configured in .env",
+      error: "Wrong Password",
       debug: "Add BLOG_ADMIN_TOKEN=your-token to .env file"
     });
   }
