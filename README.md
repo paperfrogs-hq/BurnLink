@@ -1,6 +1,6 @@
 # BurnLink
 
-[![GitHub](https://img.shields.io/badge/GitHub-BurnLink-blue?logo=github)](https://github.com/Joy-Majumder/BurnLink)
+[![GitHub](https://img.shields.io/badge/GitHub-BurnLink-blue?logo=github)](https://github.com/paperfrogs-hq/BurnLink)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Live](https://img.shields.io/badge/Live-burnlink.page-brightgreen)](https://burnlink.page)
 
@@ -196,7 +196,7 @@ Contributions are welcome. To contribute:
 
 For questions or issues:
 
-- **Bug reports:** [GitHub Issues](https://github.com/Joy-Majumder/BurnLink/issues)
+- **Bug reports:** [GitHub Issues](https://github.com/paperfrogs-hq/BurnLink/issues)
 - **Security concerns:** See [SECURITY.md](./SECURITY.md)
 - **Email:** hello@paperfrogs.dev
 

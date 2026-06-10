@@ -290,7 +290,7 @@ R2_BUCKET_NAME=your-space-name
 
 1. **Push to GitHub**
    ```bash
-   git remote add origin https://github.com/your-username/burnlink.git
+   git remote add origin https://github.com/your-username/BurnLink.git
    git push -u origin main
    ```
 

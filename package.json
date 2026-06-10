@@ -20,11 +20,11 @@
   "author": "Joy G. Majumdar",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Joy-Majumder/BurnLink.git"
+    "url": "https://github.com/paperfrogs-hq/BurnLink.git"
   },
-  "homepage": "https://github.com/Joy-Majumder/BurnLink",
+  "homepage": "https://github.com/paperfrogs-hq/BurnLink",
   "bugs": {
-    "url": "https://github.com/Joy-Majumder/BurnLink/issues"
+    "url": "https://github.com/paperfrogs-hq/BurnLink/issues"
   },
   "license": "MIT",
   "dependencies": {

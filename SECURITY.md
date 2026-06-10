@@ -12,7 +12,7 @@
 
 Report privately via:
 - Email: hello@paperfrogs.dev
-- GitHub Private Advisory: https://github.com/Joy-Majumder/BurnLink/security/advisories/new
+- GitHub Private Advisory: https://github.com/paperfrogs-hq/BurnLink/security/advisories/new
 
 **Response time:** We aim to respond within 72 hours and resolve
 critical issues within 7 days.
