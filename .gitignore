@@ -6,3 +6,9 @@ uploads
 .env.example
 .env.example.local
 # Ignore all log files
+
+# macOS
+.DS_Store
+
+# Editor / agent state
+.puku/
