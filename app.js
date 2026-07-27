@@ -552,10 +552,18 @@ function requireLicense(req, res) {
   return null;
 }
 
-const cliUploadBodyParser = express.raw({
-  type: "application/octet-stream",
-  limit: "50mb",
-});
+// CLI upload accepts JSON so the on-wire payload stays ASCII-safe.
+// Netlify Edge has historically substituted non-UTF-8 bytes in raw
+// application/octet-stream bodies with U+FFFD, which corrupted the IV
+// and made the link IV ≠ server IV at download time.
+const cliUploadBodyParser = express.json({ limit: "50mb" });
+
+function b64urlToBuffer(s) {
+  if (typeof s !== "string") throw new Error("payload must be a base64url string");
+  let b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+  b64 += "=".repeat((4 - (b64.length % 4)) % 4);
+  return Buffer.from(b64, "base64");
+}
 
 app.post(
   "/api/cli/upload",
@@ -568,11 +576,19 @@ app.post(
       const licenseKey = req.headers["x-license-key"].toString().trim();
       const licenseTier = req.cliLicense.tier;
 
-      const ciphertext = req.body;
-      if (!Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
+      const { payload } = req.body || {};
+      let ciphertext;
+      try {
+        ciphertext = b64urlToBuffer(payload);
+      } catch (e) {
         return res
           .status(400)
-          .json({ error: "Empty body. Send ciphertext as application/octet-stream." });
+          .json({ error: "Invalid JSON body. Expected { payload: <base64url> }." });
+      }
+      if (!ciphertext || ciphertext.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "Empty payload. Send { payload: <base64url> }." });
       }
       if (ciphertext.length > 50 * 1024 * 1024) {
         return res.status(413).json({ error: "Body too large." });
@@ -674,11 +690,12 @@ app.get(
       // If burn-after-read was true, RPC already deleted the row + storage
       // path. We just need to stream the bytes back. If burn-after-read was
       // false, we left the row in place for further reads.
-      res.setHeader("Content-Type", "application/octet-stream");
-      res.setHeader("X-Expires-At", String(row.expires_at || ""));
-      res.setHeader("X-Burn-After-Read", row.burn_after_read ? "true" : "false");
-      res.setHeader("Cache-Control", "no-store");
-      return res.status(200).send(ciphertext);
+      // JSON envelope keeps the payload ASCII-safe through Netlify Edge.
+      return res.status(200).json({
+        payload: ciphertext.toString("base64url"),
+        expiresAt: row.expires_at || null,
+        burnAfterRead: !!row.burn_after_read,
+      });
     } catch (err) {
       console.error("[cli/object] error:", err?.message || err);
       return res.status(500).json({ error: "Download failed." });
