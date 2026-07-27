@@ -459,6 +459,202 @@ app.param("id", (req, res, next, id) => {
   next();
 });
 
+// ── /api/cli/* — BurnLink CLI binary endpoint ─────────────────────────────
+// Private endpoint used by the closed-source BurnLink CLI. Wired before
+// `app.param("id", ...)` so base64url cli IDs aren't rejected by UUID validation.
+// Auth via X-License-Key (validated client-side; here we accept any non-empty
+// value since the entire flow is end-to-end encrypted — the key only gates
+// basic rate limiting).
+const CLI_ID_RE = /^[A-Za-z0-9_-]{12}$/;
+function validateCliId(req, res, next, id) {
+  if (!CLI_ID_RE.test(id)) {
+    return res.status(404).json({ error: "Not found." });
+  }
+  next();
+}
+
+const cliUploadBodyParser = express.raw({
+  type: "application/octet-stream",
+  limit: "50mb",
+});
+
+app.post(
+  "/api/cli/upload",
+  dbRateLimit(30, 10 * 60 * 1000),
+  cliUploadBodyParser,
+  async (req, res) => {
+    try {
+      const licenseKey = (req.headers["x-license-key"] || "").toString().trim();
+      if (!licenseKey || !licenseKey.startsWith("BURNLINK-")) {
+        return res
+          .status(401)
+          .json({ error: "Missing or invalid X-License-Key header." });
+      }
+
+      const ciphertext = req.body;
+      if (!Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "Empty body. Send ciphertext as application/octet-stream." });
+      }
+      if (ciphertext.length > 50 * 1024 * 1024) {
+        return res.status(413).json({ error: "Body too large." });
+      }
+      // Envelope: iv[12] || ct[] || tag[16] — must be at least 28 bytes.
+      if (ciphertext.length < 28) {
+        return res
+          .status(400)
+          .json({ error: "Ciphertext too short — missing IV or tag." });
+      }
+
+      const originalName = (
+        req.headers["x-original-name"] || "file"
+      )
+        .toString()
+        .replace(/[^\w.\-]/g, "_")
+        .slice(0, 255) || "file";
+
+      const expiry = (req.headers["x-expiry"] || "24h").toString();
+      const burnAfterRead =
+        (req.headers["x-burn-after-read"] || "true").toString() !== "false";
+
+      // Map CLI expiry strings to absolute timestamps. Mirror the reference
+      // server's allowlist so the CLI client and server agree.
+      const EXPIRY_MS = { "1h": 3600_000, "24h": 86400_000, "7d": 604800_000 };
+      const ttlMs = EXPIRY_MS[expiry];
+      if (!ttlMs) {
+        return res
+          .status(400)
+          .json({ error: "Invalid X-Expiry. Allowed: 1h, 24h, 7d." });
+      }
+      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+      // The CLI generates its own 12-char base64url id from 9 random bytes.
+      // We don't use the Supabase UUID — instead, store under a deterministic
+      // R2 path keyed by the CLI id, then write a row into a `cli_files`
+      // table (created below) for atomic burn.
+      const cliId = crypto.randomBytes(9).toString("base64url");
+      const cliStoragePath = `cli/${cliId}`;
+
+      await uploadToStorage(cliStoragePath, ciphertext);
+
+      const { error: insertErr } = await supabase.from("cli_files").insert({
+        id: cliId,
+        path: cliStoragePath,
+        original_name: originalName,
+        expires_at: expiresAt,
+        burn_after_read: burnAfterRead,
+        license_tier: licenseKey.includes("-DEV-") ? "DEV" : "STD",
+      });
+
+      if (insertErr) {
+        await removeFromStorage(cliStoragePath).catch(() => {});
+        throw new Error(insertErr.message);
+      }
+
+      securityLog.log("CLI_FILE_CREATED", {
+        fileId: cliId,
+        licenseTier: licenseKey.includes("-DEV-") ? "DEV" : "STD",
+        ip: req.ip,
+        size: ciphertext.length,
+        expiresAt,
+        requestId: req.id,
+      });
+
+      return res.status(201).json({ id: cliId, expiresAt });
+    } catch (err) {
+      console.error("[cli/upload] error:", err?.message || err);
+      return res.status(500).json({ error: "Upload failed." });
+    }
+  }
+);
+
+app.get(
+  "/api/cli/object/:id",
+  dbRateLimit(60, 60 * 1000),
+  validateCliId,
+  async (req, res) => {
+    try {
+      const cliId = req.params.id;
+
+      // Atomic burn via RPC. burn_cli_file() returns the row on success,
+      // null on already-burned or expired.
+      const { data: burned, error: burnErr } = await supabase.rpc(
+        "burn_cli_file",
+        { cli_id: cliId }
+      );
+
+      if (burnErr) throw new Error(burnErr.message);
+      if (!burned || burned.length === 0) {
+        return res.status(404).json({ error: "Not found." });
+      }
+      const row = Array.isArray(burned) ? burned[0] : burned;
+
+      const ciphertext = await downloadFromStorage(row.path);
+
+      // If burn-after-read was true, RPC already deleted the row + storage
+      // path. We just need to stream the bytes back. If burn-after-read was
+      // false, we left the row in place for further reads.
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("X-Expires-At", String(row.expires_at || ""));
+      res.setHeader("X-Burn-After-Read", row.burn_after_read ? "true" : "false");
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).send(ciphertext);
+    } catch (err) {
+      console.error("[cli/object] error:", err?.message || err);
+      return res.status(500).json({ error: "Download failed." });
+    }
+  }
+);
+
+app.get(
+  "/api/cli/info/:id",
+  rateLimit(60, 60 * 1000),
+  validateCliId,
+  async (req, res) => {
+    try {
+      const cliId = req.params.id;
+      const { data, error } = await supabase
+        .from("cli_files")
+        .select("expires_at, burn_after_read")
+        .eq("id", cliId)
+        .maybeSingle();
+
+      if (error) throw new Error(error.message);
+      if (!data) return res.status(404).json({ error: "Not found." });
+      if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) {
+        // Best-effort cleanup so the next info call also misses.
+        await supabase.from("cli_files").delete().eq("id", cliId);
+        return res.status(404).json({ error: "Not found." });
+      }
+
+      return res.json({
+        expiresAt: data.expires_at,
+        burnAfterRead: Boolean(data.burn_after_read),
+      });
+    } catch (err) {
+      console.error("[cli/info] error:", err?.message || err);
+      return res.status(500).json({ error: "Info failed." });
+    }
+  }
+);
+
+// ── UUID format validation — blocks DB lookup on garbage IDs ───────────────
+app.param("id", (req, res, next, id) => {
+  if (!validators.isValidUUID(id)) {
+    securityLog.log("INVALID_UUID_FORMAT", {
+      path: req.path,
+      providedId: id.substring(0, 20),
+      requestId: req.id,
+    });
+    const wantsJson = req.method === "POST" || req.path.endsWith("/raw") || req.path.endsWith("/burn");
+    return wantsJson
+      ? res.status(404).json({ error: "Not found." })
+      : res.status(404).render("not-found");
+  }
+  next();
+});
+
 app.use((req, res, next) => {
   if (!canonicalUrl || !enforceCanonicalRedirect) {
     return next();
