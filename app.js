@@ -688,10 +688,13 @@ app.get(
       // path. We just need to stream the bytes back. If burn-after-read was
       // false, we left the row in place for further reads.
       // JSON envelope keeps the payload ASCII-safe through Netlify Edge.
+      // originalName lets the CLI restore the user-facing filename on
+      // download (e.g. "cat.png" instead of "HQfi_vQkWlpI.bin").
       return res.status(200).json({
         payload: ciphertext.toString("base64url"),
         expiresAt: row.expires_at || null,
         burnAfterRead: !!row.burn_after_read,
+        originalName: row.original_name || null,
       });
     } catch (err) {
       console.error("[cli/object] error:", err?.message || err);
@@ -711,7 +714,7 @@ app.get(
       const cliId = req.params.id;
       const { data, error } = await supabase
         .from("cli_files")
-        .select("expires_at, burn_after_read")
+        .select("expires_at, burn_after_read, original_name")
         .eq("id", cliId)
         .maybeSingle();
 
@@ -726,6 +729,7 @@ app.get(
       return res.json({
         expiresAt: data.expires_at,
         burnAfterRead: Boolean(data.burn_after_read),
+        originalName: data.original_name || null,
       });
     } catch (err) {
       console.error("[cli/info] error:", err?.message || err);

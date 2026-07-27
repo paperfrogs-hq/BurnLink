@@ -12,3 +12,5 @@ uploads
 
 # Editor / agent state
 .puku/lib/issuer-pub.js
+lib/issuer-pub.js
+.puku/
