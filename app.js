@@ -552,18 +552,23 @@ function requireLicense(req, res) {
   return null;
 }
 
-// CLI upload accepts JSON so the on-wire payload stays ASCII-safe.
-// Netlify Edge has historically substituted non-UTF-8 bytes in raw
-// application/octet-stream bodies with U+FFFD, which corrupted the IV
-// and made the link IV ≠ server IV at download time.
-const cliUploadBodyParser = express.json({ limit: "50mb" });
-
-function b64urlToBuffer(s) {
-  if (typeof s !== "string") throw new Error("payload must be a base64url string");
-  let b64 = s.replace(/-/g, "+").replace(/_/g, "/");
-  b64 += "=".repeat((4 - (b64.length % 4)) % 4);
-  return Buffer.from(b64, "base64");
-}
+// CLI upload accepts raw ciphertext as application/octet-stream. The global
+// `express.json({ limit: "16kb" })` middleware only fires when the request
+// has Content-Type: application/json, so it doesn't apply here. We use
+// `express.raw` strictly on this route to bypass the 16 KB global cap.
+//
+// Wire format: raw body = iv[12] || ciphertext || tag[16] (the AES-256-GCM
+// envelope produced by the CLI's crypto.encrypt). Anything not matching
+// /api/cli/* still goes through the small JSON limit.
+//
+// The download route returns a base64url JSON envelope because Netlify's
+// edge response pass substitutes non-UTF-8 bytes with U+FFFD, which would
+// corrupt the IV if we streamed ciphertext back as application/octet-stream.
+const CLI_MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB per request
+const cliUploadBodyParser = express.raw({
+  type: "application/octet-stream",
+  limit: `${CLI_MAX_UPLOAD_BYTES + 1024}b`,
+});
 
 app.post(
   "/api/cli/upload",
@@ -576,21 +581,13 @@ app.post(
       const licenseKey = req.headers["x-license-key"].toString().trim();
       const licenseTier = req.cliLicense.tier;
 
-      const { payload } = req.body || {};
-      let ciphertext;
-      try {
-        ciphertext = b64urlToBuffer(payload);
-      } catch (e) {
+      const ciphertext = req.body;
+      if (!Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
         return res
           .status(400)
-          .json({ error: "Invalid JSON body. Expected { payload: <base64url> }." });
+          .json({ error: "Empty body. Send ciphertext as application/octet-stream." });
       }
-      if (!ciphertext || ciphertext.length === 0) {
-        return res
-          .status(400)
-          .json({ error: "Empty payload. Send { payload: <base64url> }." });
-      }
-      if (ciphertext.length > 50 * 1024 * 1024) {
+      if (ciphertext.length > CLI_MAX_UPLOAD_BYTES) {
         return res.status(413).json({ error: "Body too large." });
       }
       // Envelope: iv[12] || ct[] || tag[16] — must be at least 28 bytes.
