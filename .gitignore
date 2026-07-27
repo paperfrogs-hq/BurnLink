@@ -11,4 +11,4 @@ uploads
 .DS_Store
 
 # Editor / agent state
-.puku/
+.puku/lib/issuer-pub.js

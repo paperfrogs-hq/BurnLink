@@ -482,11 +482,31 @@ const CLI_KEY_BODY_RE =
 let _issuerPub = null;
 function loadIssuerPub() {
   if (_issuerPub) return _issuerPub;
+  // Order: env var → embedded lib/issuer-pub.js → keys/issuer.pub.
+  // The embedded copy is what makes serverless (Netlify Functions) work.
+  let pem = process.env.BURNLINK_ISSUER_PUB || null;
+  if (!pem) {
+    try {
+      pem = require("./lib/issuer-pub");
+    } catch (e) {
+      pem = null;
+    }
+  }
+  if (!pem) {
+    try {
+      pem = fs.readFileSync(
+        path.join(__dirname, "keys", "issuer.pub"),
+        "utf8"
+      );
+    } catch (e) {
+      pem = null;
+    }
+  }
+  if (!pem) {
+    _issuerPub = null;
+    return _issuerPub;
+  }
   try {
-    const pem = fs.readFileSync(
-      path.join(__dirname, "keys", "issuer.pub"),
-      "utf8"
-    );
     _issuerPub = crypto.createPublicKey(pem);
   } catch (e) {
     _issuerPub = null;
