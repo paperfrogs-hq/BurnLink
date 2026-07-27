@@ -9,6 +9,7 @@ const QRCode = require("qrcode");
 const { Jimp } = require("jimp");
 const File = require("./models/File");
 const { dbRateLimit } = require("./models/RateLimit");
+const Waitlist = require("./models/Waitlist");
 const supabase = require("./lib/supabase");
 const { getComparisonBySlug, getComparisonPages } = require("./lib/comparisons");
 const {
@@ -567,6 +568,76 @@ app.get("/roadmap", (req, res) => {
     roadmapColumns,
   });
 });
+
+app.get("/download", (req, res) => {
+  const publicBaseUrl = getPublicSiteUrl(req);
+  res.render("download", {
+    canonicalUrl: `${publicBaseUrl}/download`,
+    activePage: "download",
+  });
+});
+
+// POST /api/waitlist - Join the BurnLink CLI waitlist.
+//
+// Body: { email, name?, role? }
+// Returns: { ok, alreadyJoined, position? }
+//
+// No external email is sent. A team-only counter notification fires when
+// WAITLIST_NOTIFY is configured.
+app.post(
+  "/api/waitlist",
+  dbRateLimit(5, 60 * 1000),
+  async (req, res) => {
+    try {
+      const email = req.body?.email;
+      const name = req.body?.name;
+      const role = req.body?.role;
+
+      const ip =
+        (req.headers["x-forwarded-for"] || "").toString().split(",")[0].trim() ||
+        req.socket?.remoteAddress ||
+        "unknown";
+      const userAgent = (req.headers["user-agent"] || "").toString().slice(0, 500);
+
+      // Duplicate? Surface it gently.
+      let existing;
+      try {
+        existing = await Waitlist.findByEmail(email);
+      } catch (_) {}
+      if (existing) {
+        return res.json({ ok: true, alreadyJoined: true });
+      }
+
+      const row = await Waitlist.addSignup({ email, name, role, ip, userAgent });
+      const count = await Waitlist.countSignups().catch(() => null);
+
+      console.log(
+        `[waitlist] new signup: ${row.email} (total ${count ?? "?"})`
+      );
+
+      return res.json({
+        ok: true,
+        alreadyJoined: false,
+        position: count, // approximate position-in-queue
+      });
+    } catch (err) {
+      if (err?.code === "INVALID_EMAIL") {
+        return res.status(400).json({ ok: false, error: "Invalid email." });
+      }
+      // Race: duplicate insert between findByEmail and addSignup is caught
+      // by the unique index — Supabase returns 23505.
+      const msg = err?.message || "";
+      if (msg.includes("23505") || /duplicate key/i.test(msg)) {
+        return res.json({ ok: true, alreadyJoined: true });
+      }
+      console.error("[waitlist] db error:", msg);
+      return res.status(500).json({
+        ok: false,
+        error: "Something went wrong on our side. Try again later.",
+      });
+    }
+  }
+);
 
 app.get("/comparisons/:slug", (req, res) => {
   const comparison = getComparisonBySlug(req.params.slug);

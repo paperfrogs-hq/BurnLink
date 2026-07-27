@@ -58,14 +58,39 @@ async function executeSQLDirect() {
     auth: { persistSession: false }
   });
 
-  const sql = fs.readFileSync(path.join(__dirname, 'migrations/001_create_blog_schema.sql'), 'utf8');
-  
+  // Discover all migration files in alphabetical order (e.g. 001_…, 002_…)
+  const migrationsDir = path.join(__dirname, 'migrations');
+  const migrationFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  if (migrationFiles.length === 0) {
+    console.error('No .sql files found in migrations/');
+    process.exit(1);
+  }
+
+  console.log(
+    `Found ${migrationFiles.length} migration file(s): ${migrationFiles.join(', ')}`
+  );
+
+  for (const file of migrationFiles) {
+    await runMigrationFile(supabase, path.join(migrationsDir, file));
+  }
+
+  console.log('\nMigrations complete!');
+}
+
+async function runMigrationFile(supabase, filePath) {
+  const sql = fs.readFileSync(filePath, 'utf8');
+
   // Split SQL into individual statements (basic splitting)
   const statements = sql
     .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0 && !s.startsWith('--'));
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !s.startsWith('--'));
 
+  console.log(`\n--- ${path.basename(filePath)} ---`);
   console.log(`Found ${statements.length} SQL statements to execute...`);
 
   for (let i = 0; i < statements.length; i++) {
@@ -88,8 +113,6 @@ async function executeSQLDirect() {
       // Continue on error
     }
   }
-
-  console.log('\nMigration complete!');
 }
 
 // Run the migration

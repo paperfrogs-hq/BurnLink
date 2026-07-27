@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="BurnLink CLI — In the workshop. A privacy-first command-line companion for sharing burn-after-reading files." />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="BurnLink CLI — In the Workshop" />
+    <meta property="og:description" content="A privacy-first command-line companion for sharing burn-after-reading files. Being built right now." />
+    <meta property="og:url" content="<%= canonicalUrl %>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="<%= canonicalUrl %>" />
+
+    <title>Download BurnLink CLI — In the Workshop</title>
+
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top right, rgba(235, 88, 61, 0.1), transparent 26%),
+          #0a0a0a;
+        color: #fff;
+        line-height: 1.6;
+        overflow-x: hidden;
+        min-height: 100vh;
+      }
+      .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; }
+
+      /* Navbar */
+      header {
+        padding: 1.75rem 0; border-bottom: 1px solid #1e1e1e;
+        position: sticky; top: 0; background: #0a0a0a; z-index: 100;
+      }
+      .header-content { display: flex; justify-content: space-between; align-items: center; }
+      .logo { text-decoration: none; display: flex; align-items: center; }
+      .logo img { height: 45px; width: auto; display: block; }
+      nav { display: flex; gap: 2.5rem; }
+      nav a { text-decoration: none; color: #666; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; transition: color 0.2s; }
+      nav a:hover, nav a.active { color: #fff; }
+
+      /* Footer */
+      footer { border-top: 1px solid #1e1e1e; padding: 3rem 0; margin-top: 4rem; }
+      .footer-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 2rem; margin-bottom: 2rem; }
+      .footer-section h3 { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 1rem; color: #555; }
+      .footer-section a { display: block; color: #777; text-decoration: none; font-size: 0.85rem; margin-bottom: 0.5rem; transition: color 0.2s; }
+      .footer-section a:hover { color: #fff; }
+      .footer-bottom { border-top: 1px solid #1e1e1e; padding-top: 1.5rem; color: #444; font-size: 0.78rem; }
+
+      @media (max-width: 768px) {
+        nav { gap: 1.5rem; }
+        .header-content { flex-wrap: wrap; gap: 1rem; }
+        .footer-content { grid-template-columns: 1fr; gap: 1.5rem; }
+      }
+
+      /* Hero */
+      .hero {
+        text-align: center;
+        padding: 6rem 0 3rem;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.9rem;
+        border: 1px solid rgba(235, 88, 61, 0.4);
+        background: rgba(235, 88, 61, 0.08);
+        color: #eb583d;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 1.5rem;
+      }
+      .badge .dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: #eb583d;
+        box-shadow: 0 0 8px #eb583d;
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.55; transform: scale(0.85); }
+      }
+      .hero h1 {
+        font-size: clamp(2.4rem, 6vw, 4rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+        margin-bottom: 1.25rem;
+      }
+      .hero h1 .accent { color: #eb583d; }
+      .hero p.lead {
+        max-width: 640px;
+        margin: 0 auto 2rem;
+        font-size: 1.15rem;
+        color: #b0b0b0;
+      }
+
+      /* Terminal preview */
+      .terminal {
+        margin: 3rem auto 0;
+        max-width: 720px;
+        background: #111;
+        border: 1px solid #1e1e1e;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+        text-align: left;
+      }
+      .terminal-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.85rem 1rem;
+        background: #161616;
+        border-bottom: 1px solid #1e1e1e;
+      }
+      .terminal-bar .dot { width: 12px; height: 12px; border-radius: 50%; }
+      .terminal-bar .red { background: #ff5f56; }
+      .terminal-bar .yellow { background: #ffbd2e; }
+      .terminal-bar .green { background: #27c93f; }
+      .terminal-bar .title {
+        margin-left: 0.75rem;
+        color: #777;
+        font-size: 0.8rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .terminal pre {
+        padding: 1.5rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.95rem;
+        color: #d4d4d4;
+        line-height: 1.7;
+        overflow-x: auto;
+      }
+      .terminal .prompt { color: #eb583d; }
+      .terminal .muted { color: #6b6b6b; }
+      .terminal .cursor {
+        display: inline-block;
+        width: 8px; height: 1.1em;
+        background: #eb583d;
+        vertical-align: -2px;
+        animation: blink 1s steps(2) infinite;
+      }
+      @keyframes blink { 50% { opacity: 0; } }
+
+      /* Features */
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1.5rem;
+        padding: 4rem 0 2rem;
+      }
+      .feature {
+        border: 1px solid #1e1e1e;
+        background: #0d0d0d;
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: border-color 0.2s, transform 0.2s;
+      }
+      .feature:hover { border-color: #2a2a2a; transform: translateY(-2px); }
+      .feature .icon {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: #eb583d;
+        font-size: 0.85rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        margin-bottom: 0.75rem;
+      }
+      .feature h3 { font-size: 1rem; margin-bottom: 0.5rem; font-weight: 600; }
+      .feature p { color: #888; font-size: 0.9rem; line-height: 1.55; }
+
+      /* CTA */
+      .cta {
+        text-align: center;
+        padding: 3rem 0 1rem;
+        max-width: 640px;
+        margin: 0 auto;
+      }
+      .cta h2 { font-size: 1.5rem; margin-bottom: 0.75rem; font-weight: 600; }
+      .cta p { color: #888; font-size: 0.95rem; }
+      .cta .note {
+        margin-top: 1.25rem;
+        color: #555;
+        font-size: 0.8rem;
+      }
+
+      /* Waitlist form */
+      .waitlist {
+        max-width: 540px;
+        margin: 3rem auto 0;
+        padding: 2rem;
+        border: 1px solid #1e1e1e;
+        background: #0d0d0d;
+        border-radius: 14px;
+      }
+      .waitlist h3 {
+        font-size: 1.1rem;
+        margin-bottom: 0.4rem;
+        font-weight: 600;
+        text-align: center;
+      }
+      .waitlist .sub {
+        text-align: center;
+        color: #888;
+        font-size: 0.85rem;
+        margin-bottom: 1.5rem;
+      }
+      .form-row { margin-bottom: 1rem; }
+      .form-row label {
+        display: block;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #888;
+        margin-bottom: 0.4rem;
+        font-weight: 600;
+      }
+      .form-row input, .form-row select {
+        width: 100%;
+        padding: 0.85rem 1rem;
+        background: #050505;
+        border: 1px solid #1e1e1e;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 0.95rem;
+        font-family: inherit;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      .form-row input:focus, .form-row select:focus {
+        outline: none;
+        border-color: #eb583d;
+        background: #0a0a0a;
+      }
+      .form-row input[disabled], .form-row select[disabled] { opacity: 0.5; cursor: not-allowed; }
+      .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      @media (max-width: 540px) { .form-grid { grid-template-columns: 1fr; } }
+      .submit-btn {
+        width: 100%;
+        margin-top: 0.75rem;
+        padding: 0.95rem 1rem;
+        background: #eb583d;
+        border: none;
+        color: #fff;
+        font-size: 0.92rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.05s;
+      }
+      .submit-btn:hover:not([disabled]) { background: #d6492e; }
+      .submit-btn:active:not([disabled]) { transform: translateY(1px); }
+      .submit-btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+      .form-error {
+        margin-top: 0.75rem;
+        color: #ff7a66;
+        font-size: 0.85rem;
+        text-align: center;
+        min-height: 1.2em;
+      }
+
+      /* Success modal */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(6px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
+        animation: fadeIn 0.2s ease-out;
+      }
+      .modal-backdrop.show { display: flex; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .modal {
+        background: #111;
+        border: 1px solid #2a2a2a;
+        border-radius: 14px;
+        padding: 2.5rem 2rem 2rem;
+        max-width: 440px;
+        width: 100%;
+        text-align: center;
+        position: relative;
+        animation: pop 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      @keyframes pop {
+        from { transform: scale(0.92); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+      .modal .check {
+        width: 64px; height: 64px;
+        margin: 0 auto 1.25rem;
+        border-radius: 50%;
+        background: rgba(235, 88, 61, 0.15);
+        border: 2px solid #eb583d;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: #eb583d;
+      }
+      .modal h3 { font-size: 1.4rem; margin-bottom: 0.5rem; font-weight: 600; }
+      .modal p { color: #b0b0b0; font-size: 0.95rem; line-height: 1.55; margin-bottom: 0.75rem; }
+      .modal .position {
+        display: inline-block;
+        margin-top: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 999px;
+        background: rgba(235, 88, 61, 0.1);
+        border: 1px solid rgba(235, 88, 61, 0.3);
+        color: #eb583d;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+      .modal .close {
+        position: absolute;
+        top: 1rem; right: 1rem;
+        background: none;
+        border: none;
+        color: #888;
+        font-size: 1.5rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        transition: color 0.2s, background 0.2s;
+      }
+      .modal .close:hover { color: #fff; background: #1e1e1e; }
+      .modal .dismiss-btn {
+        margin-top: 1.5rem;
+        padding: 0.7rem 1.5rem;
+        background: transparent;
+        border: 1px solid #2a2a2a;
+        color: #fff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      .modal .dismiss-btn:hover { border-color: #eb583d; background: rgba(235, 88, 61, 0.1); }
+    </style>
+</head>
+<body>
+  <%- include("partials/header") %>
+
+  <main class="container">
+    <section class="hero">
+      <span class="badge"><span class="dot"></span> In the Workshop</span>
+      <h1>BurnLink from your <span class="accent">terminal</span>.</h1>
+      <p class="lead">
+        A privacy-first command-line companion for sharing burn-after-reading files.
+        Upload, encrypt, and burn without leaving the shell.
+      </p>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          <span class="title">burnlink — preview</span>
+        </div>
+<pre><span class="muted">$</span> <span class="prompt">burnlink</span> send ./secrets.zip
+<span class="muted">› Encrypting locally with XChaCha20…</span>
+<span class="muted">› Generating single-use link…</span>
+<span class="muted">✓</span> Link ready: https://burnlink.page/d/<span class="muted">a1b2c3</span>
+<span class="muted">› Link expires after first view.</span>
+
+<span class="muted">$</span> <span class="prompt">burnlink</span> receive <span class="muted">a1b2c3</span>
+<span class="muted">› Fetching and decrypting…</span>
+<span class="muted">✓</span> Saved to ./secrets.zip<span class="cursor"></span>
+</pre>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="feature">
+        <div class="icon">01</div>
+        <h3>One command to send</h3>
+        <p>Upload any file and get a self-destructing link in seconds.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">02</div>
+        <h3>Burn after reading</h3>
+        <p>Links expire automatically after the first download.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">03</div>
+        <h3>End-to-end encrypted</h3>
+        <p>Files are encrypted client-side before they leave your machine.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">04</div>
+        <h3>Zero account needed</h3>
+        <p>Pure CLI workflow — no logins, no friction, just a link.</p>
+      </div>
+    </section>
+
+    <section class="cta">
+      <h2>Sharpening the blade.</h2>
+      <p>The BurnLink CLI is being built in public — first release lands when it's ready, not a moment sooner.</p>
+      <p class="note">Until then, the web app at <a href="/" style="color:#eb583d;text-decoration:none;">burnlink.page</a> has everything you need.</p>
+    </section>
+
+    <section class="waitlist" id="waitlist">
+      <h3>Get notified at launch</h3>
+      <p class="sub">Drop your details. We'll email you the moment the CLI build is live.</p>
+
+      <form id="waitlist-form" novalidate>
+        <div class="form-row">
+          <label for="wl-email">Email</label>
+          <input
+            type="email"
+            id="wl-email"
+            name="email"
+            placeholder="you@domain.com"
+            required
+            autocomplete="email"
+          />
+        </div>
+
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="wl-name">Name <span style="color:#555;text-transform:none;">(optional)</span></label>
+            <input
+              type="text"
+              id="wl-name"
+              name="name"
+              placeholder="Joy"
+              maxlength="200"
+              autocomplete="name"
+            />
+          </div>
+          <div class="form-row">
+            <label for="wl-role">Role <span style="color:#555;text-transform:none;">(optional)</span></label>
+            <select id="wl-role" name="role">
+              <option value="">Select…</option>
+              <option value="developer">Developer</option>
+              <option value="designer">Designer</option>
+              <option value="founder">Founder</option>
+              <option value="researcher">Researcher</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="wl-submit">Join the Waitlist</button>
+        <div class="form-error" id="wl-error" aria-live="polite"></div>
+      </form>
+    </section>
+  </main>
+
+  <%- include("partials/footer") %>
+
+  <!-- Waitlist success modal -->
+  <div class="modal-backdrop" id="wl-modal" role="dialog" aria-modal="true" aria-labelledby="wl-modal-title">
+    <div class="modal">
+      <button type="button" class="close" id="wl-modal-close" aria-label="Close">&times;</button>
+      <div class="check" id="wl-modal-icon">✓</div>
+      <h3 id="wl-modal-title">You're on the list.</h3>
+      <p id="wl-modal-body">We'll email you the moment the BurnLink CLI build is ready.</p>
+      <div class="position" id="wl-modal-position" style="display:none;"></div>
+      <button type="button" class="dismiss-btn" id="wl-modal-dismiss">Got it</button>
+    </div>
+  </div>
+
+  <script src="/download.js" defer></script>
+</body>
+</html>
