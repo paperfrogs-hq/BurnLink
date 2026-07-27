@@ -6,7 +6,8 @@ functions = "netlify/functions"
 [functions]
 node_bundler = "esbuild"
 external_node_modules = ["ejs"]
-included_files = ["views/**", "public/**"]
+included_files = ["views/**", "public/**", "keys/**"]
+
 
 [dev]
 command = "npm run dev"
