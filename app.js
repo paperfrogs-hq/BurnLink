@@ -738,6 +738,106 @@ app.get(
   }
 );
 
+// ── /install.sh and /install.ps1 — one-line installer proxies ────────────
+//
+// Users run `curl -fsSL https://burnlink.page/install.sh | sh`. We don't
+// vendor the script files in the repo (they'd drift out of sync with every
+// CLI release). Instead, we resolve the latest CLI release tag via the
+// GitHub Releases API and stream the asset body back to the visitor.
+//
+// The CLI repo may be private, so we can't redirect to github.com (anonymous
+// requests would 404). We fetch server-side using `BURNLINK_CLI_TOKEN`
+// (a fine-grained GitHub PAT with `contents:read` on the CLI repo) and stream
+// the body. Set `BURNLINK_CLI_REPO` to override the source repo (forks /
+// staging).
+const CLI_INSTALL_REPO =
+  process.env.BURNLINK_CLI_REPO || "Joy-Majumder/BurnLink-CLI";
+const CLI_INSTALL_TOKEN = process.env.BURNLINK_CLI_TOKEN || "";
+
+const INSTALL_USER_AGENT = "burnlink-install-proxy/1.0";
+
+async function resolveLatestCliTag() {
+  const url = `https://api.github.com/repos/${CLI_INSTALL_REPO}/releases/latest`;
+  const headers = {
+    "User-Agent": INSTALL_USER_AGENT,
+    Accept: "application/vnd.github+json",
+  };
+  if (CLI_INSTALL_TOKEN) headers.Authorization = `Bearer ${CLI_INSTALL_TOKEN}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+  const j = await res.json();
+  if (!j.tag_name) throw new Error("no tag_name in release payload");
+  return j.tag_name;
+}
+
+function installProxyRoute(filename, contentType) {
+  return async (req, res) => {
+    try {
+      const tag = await resolveLatestCliTag();
+
+      // Look up the asset metadata via the Releases API. Auth header is
+      // included so this works against private repos.
+      const listHeaders = {
+        "User-Agent": INSTALL_USER_AGENT,
+        Accept: "application/vnd.github+json",
+      };
+      if (CLI_INSTALL_TOKEN)
+        listHeaders.Authorization = `Bearer ${CLI_INSTALL_TOKEN}`;
+      const releaseRes = await fetch(
+        `https://api.github.com/repos/${CLI_INSTALL_REPO}/releases/tags/${encodeURIComponent(tag)}`,
+        { headers: listHeaders }
+      );
+      if (!releaseRes.ok) throw new Error(`GitHub release ${releaseRes.status}`);
+      const releaseJson = await releaseRes.json();
+      const asset = (releaseJson.assets || []).find(
+        (a) => a.name === filename
+      );
+      if (!asset) throw new Error(`asset ${filename} not found in ${tag}`);
+
+      // Pick the asset URL based on whether we have a token.
+      //   - With token (private repo): use the API asset endpoint with auth.
+      //   - Without token (public repo): redirect to browser_download_url —
+      //     cheaper and lets the client cache the asset itself.
+      let fetchUrl;
+      const fetchHeaders = { "User-Agent": INSTALL_USER_AGENT };
+      if (CLI_INSTALL_TOKEN) {
+        fetchUrl = asset.url;
+        fetchHeaders.Authorization = `Bearer ${CLI_INSTALL_TOKEN}`;
+      } else {
+        fetchUrl = asset.browser_download_url;
+        if (!fetchUrl)
+          throw new Error("asset has no browser_download_url; set BURNLINK_CLI_TOKEN");
+      }
+      const assetRes = await fetch(fetchUrl, {
+        headers: fetchHeaders,
+        redirect: "follow",
+      });
+      if (!assetRes.ok) throw new Error(`asset fetch ${assetRes.status}`);
+      const body = Buffer.from(await assetRes.arrayBuffer());
+
+      // Short cache so consecutive installs are fast, but every release is
+      // picked up promptly. `no-store` would defeat `curl | sh` retries.
+      res.set("Cache-Control", "public, max-age=60");
+      res.set("Content-Type", contentType);
+      res.set("Content-Length", String(body.length));
+      return res.status(200).send(body);
+    } catch (err) {
+      console.error("[install-proxy] error:", err?.message || err);
+      return res.status(502).type("text/plain").send(
+        "Could not resolve latest BurnLink CLI release.\n" +
+          "Try again in a moment, or report this at https://github.com/" +
+          `${CLI_INSTALL_REPO}/issues.\n`
+      );
+    }
+  };
+}
+
+app.get("/install.sh", installProxyRoute("install.sh", "text/x-shellscript"));
+app.get("/install.ps1", installProxyRoute("install.ps1", "text/plain"));
+app.get("/cli/install", (req, res) => res.redirect(302, "/install.sh"));
+
+// ── UUID format validation — blocks DB lookup on garbage IDs ───────────────
+
 // ── UUID format validation — blocks DB lookup on garbage IDs ───────────────
 app.param("id", (req, res, next, id) => {
   // /api/cli/* uses base64url cli IDs (validated by the route-level
