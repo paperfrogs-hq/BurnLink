@@ -445,6 +445,9 @@ function rateLimit(maxRequests, windowMs) {
 
 // ── UUID format validation — blocks DB lookup on garbage IDs ───────────────
 app.param("id", (req, res, next, id) => {
+  // /api/cli/* uses base64url cli IDs (validated by the route-level
+  // `validateCliId` middleware), so the UUID format check doesn't apply.
+  if (req.path && req.path.startsWith("/api/cli/")) return next();
   if (!validators.isValidUUID(id)) {
     securityLog.log("INVALID_UUID_FORMAT", {
       path: req.path,
@@ -462,15 +465,71 @@ app.param("id", (req, res, next, id) => {
 // ── /api/cli/* — BurnLink CLI binary endpoint ─────────────────────────────
 // Private endpoint used by the closed-source BurnLink CLI. Wired before
 // `app.param("id", ...)` so base64url cli IDs aren't rejected by UUID validation.
-// Auth via X-License-Key (validated client-side; here we accept any non-empty
-// value since the entire flow is end-to-end encrypted — the key only gates
-// basic rate limiting).
+// Auth via X-License-Key: server verifies an Ed25519 signature against the
+// bundled issuer public key before processing. This prevents random users
+// from hitting the upload pipeline with arbitrary "BURNLINK-…" strings.
 const CLI_ID_RE = /^[A-Za-z0-9_-]{12}$/;
 function validateCliId(req, res, next, id) {
   if (!CLI_ID_RE.test(id)) {
     return res.status(404).json({ error: "Not found." });
   }
   next();
+}
+
+const CLI_KEY_BODY_RE =
+  /^BURNLINK-(STD|DEV)-([A-Z0-9]{4})-([A-Z0-9]{4})-([A-Z0-9]{4})\.([A-Za-z0-9_-]+)$/;
+
+let _issuerPub = null;
+function loadIssuerPub() {
+  if (_issuerPub) return _issuerPub;
+  try {
+    const pem = fs.readFileSync(
+      path.join(__dirname, "keys", "issuer.pub"),
+      "utf8"
+    );
+    _issuerPub = crypto.createPublicKey(pem);
+  } catch (e) {
+    _issuerPub = null;
+  }
+  return _issuerPub;
+}
+
+function verifyLicenseKey(raw) {
+  if (!raw) return { ok: false, reason: "missing" };
+  const m = raw.match(CLI_KEY_BODY_RE);
+  if (!m) return { ok: false, reason: "format" };
+  const [, tier, g1, g2, cc, sig] = m;
+  // Body before the dot is exactly what was signed.
+  const body = `BURNLINK-${tier}-${g1}-${g2}-${cc}`;
+  const expected = crypto
+    .createHash("sha256")
+    .update(`${tier}:${g1}-${g2}`)
+    .digest("hex")
+    .toUpperCase()
+    .slice(0, 4);
+  if (cc !== expected) return { ok: false, reason: "checksum" };
+  const pub = loadIssuerPub();
+  if (!pub) return { ok: false, reason: "issuer-key-missing" };
+  try {
+    const sigBuf = Buffer.from(sig, "base64url");
+    const ok = crypto.verify(null, Buffer.from(body, "utf8"), pub, sigBuf);
+    if (!ok) return { ok: false, reason: "signature" };
+    return { ok: true, tier, sig };
+  } catch (_) {
+    return { ok: false, reason: "signature" };
+  }
+}
+
+function requireLicense(req, res) {
+  const raw = (req.headers["x-license-key"] || "").toString().trim();
+  const v = verifyLicenseKey(raw);
+  if (!v.ok) {
+    return res
+      .status(401)
+      .json({ error: "Invalid license key.", reason: v.reason });
+  }
+  req.cliLicense = v;
+  return null;
 }
 
 const cliUploadBodyParser = express.raw({
@@ -484,12 +543,10 @@ app.post(
   cliUploadBodyParser,
   async (req, res) => {
     try {
-      const licenseKey = (req.headers["x-license-key"] || "").toString().trim();
-      if (!licenseKey || !licenseKey.startsWith("BURNLINK-")) {
-        return res
-          .status(401)
-          .json({ error: "Missing or invalid X-License-Key header." });
-      }
+      const denied = requireLicense(req, res);
+      if (denied) return denied;
+      const licenseKey = req.headers["x-license-key"].toString().trim();
+      const licenseTier = req.cliLicense.tier;
 
       const ciphertext = req.body;
       if (!Buffer.isBuffer(ciphertext) || ciphertext.length === 0) {
@@ -544,7 +601,7 @@ app.post(
         original_name: originalName,
         expires_at: expiresAt,
         burn_after_read: burnAfterRead,
-        license_tier: licenseKey.includes("-DEV-") ? "DEV" : "STD",
+        license_tier: licenseTier,
       });
 
       if (insertErr) {
@@ -554,7 +611,7 @@ app.post(
 
       securityLog.log("CLI_FILE_CREATED", {
         fileId: cliId,
-        licenseTier: licenseKey.includes("-DEV-") ? "DEV" : "STD",
+        licenseTier,
         ip: req.ip,
         size: ciphertext.length,
         expiresAt,
@@ -575,6 +632,8 @@ app.get(
   validateCliId,
   async (req, res) => {
     try {
+      const denied = requireLicense(req, res);
+      if (denied) return denied;
       const cliId = req.params.id;
 
       // Atomic burn via RPC. burn_cli_file() returns the row on success,
@@ -613,6 +672,8 @@ app.get(
   validateCliId,
   async (req, res) => {
     try {
+      const denied = requireLicense(req, res);
+      if (denied) return denied;
       const cliId = req.params.id;
       const { data, error } = await supabase
         .from("cli_files")
@@ -641,6 +702,9 @@ app.get(
 
 // ── UUID format validation — blocks DB lookup on garbage IDs ───────────────
 app.param("id", (req, res, next, id) => {
+  // /api/cli/* uses base64url cli IDs (validated by the route-level
+  // `validateCliId` middleware), so the UUID format check doesn't apply.
+  if (req.path && req.path.startsWith("/api/cli/")) return next();
   if (!validators.isValidUUID(id)) {
     securityLog.log("INVALID_UUID_FORMAT", {
       path: req.path,
