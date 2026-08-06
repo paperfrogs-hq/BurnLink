@@ -751,7 +751,7 @@ app.get(
 // the body. Set `BURNLINK_CLI_REPO` to override the source repo (forks /
 // staging).
 const CLI_INSTALL_REPO =
-  process.env.BURNLINK_CLI_REPO || "Joy-Majumder/BurnLink-CLI";
+  process.env.BURNLINK_CLI_REPO || "paperfrogs-hq/BurnLink-CLI";
 const CLI_INSTALL_TOKEN = process.env.BURNLINK_CLI_TOKEN || "";
 
 const INSTALL_USER_AGENT = "burnlink-install-proxy/1.0";
