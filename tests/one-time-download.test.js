@@ -38,11 +38,23 @@ storage.streamFromStorage = async (key) => {
   }
   return { stream: Readable.from([value.subarray(0, 2), value.subarray(2)]), contentLength: value.length };
 };
-storage.getStorageSize = async key => objects.get(key)?.length;
+storage.getStorageSize = async key => objects.get(key)?.size ?? objects.get(key)?.length;
 storage.downloadFromStorage = async key => {
   const value = objects.get(key);
-  if (!value) throw new Error("NoSuchKey");
+  if (!value) throw Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" });
   return value;
+};
+storage.uploadToStorage = async (key, bytes) => { objects.set(key, Buffer.from(bytes)); };
+storage.downloadStorageRange = async (key, start, end) => {
+  const value = objects.get(key);
+  if (!value) throw new Error("NoSuchKey");
+  if (!Buffer.isBuffer(value)) return Buffer.alloc(end - start + 1, 0xaa);
+  return value.subarray(start, end + 1);
+};
+storage.claimStorageKey = async key => {
+  if (objects.has(key)) return false;
+  objects.set(key, Buffer.alloc(0));
+  return true;
 };
 storage.removeFromStorage = async (key) => {
   events.push(`delete:${key}`);
@@ -76,7 +88,8 @@ supabase.rpc = async (name, params) => {
 };
 
 const app = require("../app");
-const serverless = require("serverless-http");
+const netlifyHandler = require("../netlify/functions/app").handler;
+delete process.env.BURNLINK_BUFFERED_FUNCTION;
 let server;
 let port;
 
@@ -128,6 +141,33 @@ function parseInBrowser(bytes) {
   const context = { TextDecoder, DataView, Number, JSON };
   vm.runInNewContext(template.slice(start, end), context);
   return context.parseOneTimeTransfer(new Uint8Array(bytes));
+}
+
+async function readChunkedInBrowser(startResponse) {
+  const template = fs.readFileSync(path.join(__dirname, "../views/password.ejs"), "utf8");
+  const start = template.indexOf("async function readOneTimeTransfer(response, onProgress)");
+  const end = template.indexOf("async function streamWithProgress", start);
+  assert.ok(start >= 0 && end > start);
+  const context = {
+    Number, JSON, Uint8Array,
+    fetch: async (_url, options) => {
+      const result = await netlifyHandler({
+        httpMethod: "POST", path: "/api/transfer/chunk",
+        headers: { "content-type": "application/json" },
+        body: options.body, requestContext: {},
+      }, {});
+      return {
+        ok: result.statusCode === 200,
+        json: async () => JSON.parse(result.body),
+        arrayBuffer: async () => Buffer.from(result.body, result.isBase64Encoded ? "base64" : "utf8"),
+      };
+    },
+  };
+  vm.runInNewContext(template.slice(start, end), context);
+  return context.readOneTimeTransfer({
+    headers: { get: () => "application/json" },
+    json: async () => JSON.parse(startResponse.body),
+  }, () => {});
 }
 
 test("one-time read deletes R2 on the server and exposes no reusable URL", async () => {
@@ -300,18 +340,104 @@ test("partial bundle burn releases no content and deletes only rows it burned", 
   }
 });
 
-test("Netlify size guard keeps an oversized one-time link intact", async () => {
+test("Netlify transfers files larger than 4 MiB in single-use chunks", async () => {
   const id = "92d0f657-99f9-46ea-9e19-650f5d2a1947";
   const path = `2026-10-22/${id}-large.txt`;
   rows.set(id, { id, path, originalName: "large.txt" });
-  objects.set(path, Buffer.alloc(4 * 1024 * 1024 + 1));
+  const ciphertext = Buffer.concat([Buffer.from("FSE1"), Buffer.alloc(4 * 1024 * 1024, 0xff)]);
+  objects.set(path, ciphertext);
   process.env.NETLIFY = "true";
   try {
-    const response = await request(`/s/${id}/raw`);
-    assert.equal(response.status, 413);
-    assert.equal(rows.has(id), true);
+    const start = await netlifyHandler(
+      { httpMethod: "GET", path: `/s/${id}/raw`, headers: {}, requestContext: {} }, {}
+    );
+    assert.equal(start.statusCode, 200);
+    const session = JSON.parse(start.body);
+    assert.equal(session.transfer, "chunked");
+    assert.equal(rows.has(id), false);
+    assert.equal(objects.has(path), true);
+    const fetchChunk = async chunkIndex => netlifyHandler({
+      httpMethod: "POST",
+      path: "/api/transfer/chunk",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ session: session.session, fileIndex: 0, chunkIndex }),
+      requestContext: {},
+    }, {});
+    const first = await fetchChunk(0);
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.isBase64Encoded, true);
+    assert.equal(objects.has(path), true);
+    assert.equal((await fetchChunk(0)).statusCode, 410);
+    const last = await fetchChunk(1);
+    assert.equal(last.statusCode, 200);
+    assert.equal(last.isBase64Encoded, true);
+    assert.deepEqual(Buffer.concat([
+      Buffer.from(first.body, "base64"), Buffer.from(last.body, "base64"),
+    ]), ciphertext);
+    assert.equal(objects.has(path), false);
+    assert.equal((await fetchChunk(1)).statusCode, 410);
+  } finally {
+    delete process.env.NETLIFY;
+  }
+});
+
+test("browser assembles and decrypts a large View Once transfer", async () => {
+  const id = crypto.randomUUID();
+  const path = `2026-10-22/${id}-browser-large.txt`;
+  const plaintext = Buffer.alloc(4 * 1024 * 1024, 0x41);
+  const keyBytes = crypto.randomBytes(32);
+  const iv = crypto.randomBytes(12);
+  const key = await crypto.webcrypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+  const ciphertext = Buffer.from(await crypto.webcrypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext));
+  const envelope = Buffer.concat([Buffer.from([70, 83, 69, 49, 1, 2, 0, iv.length]), iv, ciphertext]);
+  rows.set(id, { id, path, originalName: "browser-large.txt", mode: "view-once", linkKey: keyBytes.toString("base64url") });
+  objects.set(path, envelope);
+  process.env.NETLIFY = "true";
+  try {
+    const start = await netlifyHandler(
+      { httpMethod: "GET", path: `/s/${id}/raw`, headers: {}, requestContext: {} }, {}
+    );
+    assert.equal(start.statusCode, 200);
+    const files = await readChunkedInBrowser(start);
+    const received = Buffer.from(files[0].payload);
+    assert.deepEqual(received, envelope);
+    assert.deepEqual(Buffer.from(await crypto.webcrypto.subtle.decrypt(
+      { name: "AES-GCM", iv: received.subarray(8, 20) }, key, received.subarray(20)
+    )), plaintext);
+    assert.equal(objects.has(path), false);
+    assert.equal(rows.has(id), false);
+  } finally {
+    delete process.env.NETLIFY;
+  }
+});
+
+test("a 1 GB transfer withholds its final chunk when R2 deletion fails", async () => {
+  const id = crypto.randomUUID();
+  const path = `2026-10-22/${id}-one-gigabyte.bin`;
+  rows.set(id, { id, path, originalName: "one-gigabyte.bin" });
+  objects.set(path, { size: 1024 * 1024 * 1024 });
+  process.env.NETLIFY = "true";
+  try {
+    const start = await netlifyHandler(
+      { httpMethod: "GET", path: `/s/${id}/raw`, headers: {}, requestContext: {} }, {}
+    );
+    assert.equal(start.statusCode, 200);
+    const session = JSON.parse(start.body);
+    assert.equal(session.transfer, "chunked");
+    const lastIndex = Math.ceil(session.files[0].size / session.chunkSize) - 1;
+    assert.ok(lastIndex > 300);
+    deleteFailure = true;
+    const last = await netlifyHandler({
+      httpMethod: "POST", path: "/api/transfer/chunk",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ session: session.session, fileIndex: 0, chunkIndex: lastIndex }),
+      requestContext: {},
+    }, {});
+    assert.equal(last.statusCode, 500);
+    assert.equal(last.isBase64Encoded, false);
     assert.equal(objects.has(path), true);
   } finally {
+    deleteFailure = false;
     delete process.env.NETLIFY;
   }
 });
@@ -337,27 +463,60 @@ test("client disconnect still triggers server-side object deletion", async () =>
   }
 });
 
-test("serverless adapter completes a small secure transfer", async () => {
+test("Netlify adapter preserves arbitrary encrypted bytes", async () => {
   const id = "9d4be49a-df9b-456d-82a7-733083fa1246";
   const path = `2026-10-22/${id}-small.txt`;
   rows.set(id, { id, path, originalName: "small.txt" });
-  objects.set(path, Buffer.from("ciphertext"));
-  const handler = serverless(app);
+  const ciphertext = Buffer.concat([Buffer.from("FSE1"), Buffer.alloc(256, 0xff)]);
+  objects.set(path, ciphertext);
   process.env.NETLIFY = "true";
   let timeout;
   try {
     const response = await Promise.race([
-      handler({ httpMethod: "GET", path: `/s/${id}/raw`, headers: {}, requestContext: {} }, {}),
+      netlifyHandler({ httpMethod: "GET", path: `/s/${id}/raw`, headers: {}, requestContext: {} }, {}),
       new Promise((_, reject) => {
         timeout = setTimeout(() => reject(new Error("serverless transfer timed out")), 1000);
       }),
     ]);
     assert.equal(response.statusCode, 200);
+    assert.equal(response.isBase64Encoded, true);
     const body = Buffer.from(response.body, response.isBase64Encoded ? "base64" : "utf8");
-    assert.equal(parseTransfer(body)[0].payload.toString(), "ciphertext");
+    assert.deepEqual(Buffer.from(parseInBrowser(body)[0].payload), ciphertext);
     assert.equal(objects.has(path), false);
   } finally {
     clearTimeout(timeout);
+    delete process.env.NETLIFY;
+  }
+});
+
+test("View Once ciphertext decrypts after Netlify transfer", async () => {
+  const id = crypto.randomUUID();
+  const path = `2026-10-22/${id}-view-once.txt`;
+  const keyBytes = crypto.randomBytes(32);
+  const iv = crypto.randomBytes(12);
+  const plaintext = Buffer.from("view-once content");
+  const key = await crypto.webcrypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+  const ciphertext = Buffer.from(await crypto.webcrypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext));
+  const envelope = Buffer.concat([Buffer.from([70, 83, 69, 49, 1, 2, 0, iv.length]), iv, ciphertext]);
+  rows.set(id, { id, path, originalName: "view-once.txt", mode: "view-once", linkKey: keyBytes.toString("base64url") });
+  objects.set(path, envelope);
+  process.env.NETLIFY = "true";
+  try {
+    const response = await netlifyHandler(
+      { httpMethod: "GET", path: `/s/${id}/raw`, headers: {}, requestContext: {} }, {}
+    );
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.isBase64Encoded, true);
+    const transfer = Buffer.from(response.body, "base64");
+    const received = Buffer.from(parseInBrowser(transfer)[0].payload);
+    assert.deepEqual(received, envelope);
+    const decrypted = Buffer.from(await crypto.webcrypto.subtle.decrypt(
+      { name: "AES-GCM", iv: received.subarray(8, 20) }, key, received.subarray(20)
+    ));
+    assert.deepEqual(decrypted, plaintext);
+    assert.equal(objects.has(path), false);
+    assert.equal(rows.has(id), false);
+  } finally {
     delete process.env.NETLIFY;
   }
 });
@@ -370,7 +529,7 @@ test("serverless adapter fails closed when R2 deletion fails", async () => {
   deleteFailure = true;
   process.env.NETLIFY = "true";
   try {
-    const response = await serverless(app)(
+    const response = await netlifyHandler(
       { httpMethod: "GET", path: `/s/${id}/raw`, headers: {}, requestContext: {} },
       {}
     );

@@ -288,11 +288,12 @@ R2_BUCKET_NAME=your-space-name
 
 ### Option 1: Netlify (Easiest)
 
-Netlify's current `serverless-http` adapter buffers download responses. For
-one-time links, this deployment serves encrypted downloads up to 4 MiB; larger
-downloads return HTTP 413 without burning the link. Use the Node server on a
-host that supports streaming responses for larger files. The server proxies the
-encrypted bytes and confirms R2 deletion before completing each file transfer.
+Netlify's `serverless-http` adapter buffers each function response. Encrypted
+downloads larger than 4 MiB are therefore delivered in 3 MiB server-controlled
+chunks, supporting the same 1 GB upload limit. Each chunk can be claimed once;
+the server deletes the R2 object before returning its final chunk. Chunked
+transfer sessions expire after two hours. The Node server continues to stream
+encrypted files directly.
 The included daily scheduled function also removes R2 objects older than 24
 hours that no longer have a file record, including web and CLI blobs left by
 earlier versions or interrupted transfers. It saves its scan position in R2, so large

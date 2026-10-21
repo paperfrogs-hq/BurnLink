@@ -29,7 +29,7 @@ const {
   securityLog,
 } = require("./lib/security");
 
-const { uploadToStorage, downloadFromStorage, streamFromStorage, getStorageSize, removeFromStorage, getPresignedPutUrl, getFirstBytes } = require("./lib/r2");
+const { uploadToStorage, downloadFromStorage, downloadStorageRange, claimStorageKey, streamFromStorage, getStorageSize, removeFromStorage, getPresignedPutUrl, getFirstBytes } = require("./lib/r2");
 
 // Validate environment on startup
 validateEnvironment();
@@ -208,6 +208,48 @@ function transferMetadata(files, sizes) {
   }));
 }
 
+const TRANSFER_CHUNK_BYTES = 3 * 1024 * 1024;
+const TRANSFER_SESSION_MS = 2 * 60 * 60 * 1000;
+const TRANSFER_SESSION_RE = /^\d{4}-\d{2}-\d{2}\/[0-9a-f-]{36}-transfer-manifest$/i;
+
+async function startChunkedTransfer(res, files, sizes) {
+  if (sizes.some(size => !Number.isSafeInteger(size) || size < 1 || size > MAX_UPLOAD_BYTES + 1024 * 1024) ||
+      sizes.reduce((sum, size) => sum + size, 0) > MAX_UPLOAD_BYTES + 1024 * 1024) {
+    return res.status(413).json({ error: "File exceeds the 1 GB transfer limit." });
+  }
+  let burnedFiles = [];
+  try {
+    const results = await Promise.allSettled(files.map(item =>
+      supabase.rpc("burn_file", { file_id: item.id })
+    ));
+    const burned = result => result.status === "fulfilled" &&
+      !result.value.error && Array.isArray(result.value.data) && result.value.data.length > 0;
+    burnedFiles = files.filter((_, index) => burned(results[index]));
+    if (results.some(result => !burned(result))) {
+      await Promise.allSettled(burnedFiles.map(item => removeFromStorage(item.path)));
+      return res.status(410).json({ error: "Link already used." });
+    }
+
+    const session = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-transfer-manifest`;
+    const manifest = {
+      expiresAt: Date.now() + TRANSFER_SESSION_MS,
+      chunkSize: TRANSFER_CHUNK_BYTES,
+      files: files.map((item, index) => ({ path: item.path, name: item.originalName, size: sizes[index] })),
+    };
+    await uploadToStorage(session, Buffer.from(JSON.stringify(manifest)));
+    return res.status(200).set("Cache-Control", "no-store").json({
+      transfer: "chunked",
+      session,
+      chunkSize: TRANSFER_CHUNK_BYTES,
+      files: manifest.files.map(item => ({ name: item.name, size: item.size })),
+    });
+  } catch (error) {
+    await Promise.allSettled(burnedFiles.map(item => removeFromStorage(item.path)));
+    console.error("Chunked transfer start failed:", error);
+    return res.status(500).json({ error: "Failed to start secure transfer." });
+  }
+}
+
 // uploadToStorage, downloadFromStorage, removeFromStorage are imported from lib/r2.js
 
 async function sendOneTimeEncryptedFile(res, file, bundleFiles = null) {
@@ -217,13 +259,19 @@ async function sendOneTimeEncryptedFile(res, file, bundleFiles = null) {
     return res.status(410).render("not-found");
   }
 
-  // serverless-http buffers the complete response. Keep its binary payload
-  // below Netlify's function response limit, before consuming the one-time link.
+  // Netlify buffers responses. Use one-time server-side chunks when a complete
+  // binary frame would exceed its safe buffered response size.
   if (bufferedFunction) {
     const sizes = await Promise.all(filesToBurn.map(f => getStorageSize(f.path)));
-    if (sizes.some(size => !Number.isSafeInteger(size) || size < 0) ||
-        4 + transferMetadata(filesToBurn, sizes).length + sizes.reduce((sum, size) => sum + size, 0) > 4 * 1024 * 1024) {
-      return res.status(413).json({ error: "This file requires a streaming server to download securely." });
+    if (sizes.some(size => !Number.isSafeInteger(size) || size < 0)) {
+      return res.status(500).json({ error: "Storage object length unavailable." });
+    }
+    if (sizes.some(size => size > MAX_UPLOAD_BYTES + 1024 * 1024) ||
+        sizes.reduce((sum, size) => sum + size, 0) > MAX_UPLOAD_BYTES + 1024 * 1024) {
+      return res.status(413).json({ error: "File exceeds the 1 GB transfer limit." });
+    }
+    if (4 + transferMetadata(filesToBurn, sizes).length + sizes.reduce((sum, size) => sum + size, 0) > 4 * 1024 * 1024) {
+      return startChunkedTransfer(res, filesToBurn, sizes);
     }
   }
 
@@ -246,7 +294,7 @@ async function sendOneTimeEncryptedFile(res, file, bundleFiles = null) {
     header.writeUInt32BE(metadata.length);
     const totalLength = 4 + metadata.length + sources.reduce((sum, source) => sum + source.contentLength, 0);
     if (bufferedFunction && totalLength > 4 * 1024 * 1024) {
-      return res.status(413).json({ error: "This file requires a streaming server to download securely." });
+      return startChunkedTransfer(res, filesToBurn, sources.map(source => source.contentLength));
     }
 
     // Open the storage streams before the atomic burn. A missing or unreadable
@@ -1542,6 +1590,62 @@ app.get("/s/:id", async (req, res) => {
     });
   } catch (error) {
     return res.status(400).render("not-found");
+  }
+});
+
+app.post("/api/transfer/chunk", rateLimit(600, 60 * 1000), async (req, res) => {
+  const { session, fileIndex, chunkIndex } = req.body || {};
+  if (typeof session !== "string" || !TRANSFER_SESSION_RE.test(session) ||
+      !Number.isSafeInteger(fileIndex) || !Number.isSafeInteger(chunkIndex)) {
+    return res.status(400).json({ error: "Invalid transfer request." });
+  }
+  try {
+    const manifest = JSON.parse((await downloadFromStorage(session)).toString("utf8"));
+    if (!Array.isArray(manifest.files) || manifest.files.length < 1 || manifest.files.length > 100 ||
+        manifest.chunkSize !== TRANSFER_CHUNK_BYTES || !Number.isSafeInteger(manifest.expiresAt)) {
+      throw new Error("Invalid transfer manifest");
+    }
+    if (manifest.expiresAt < Date.now()) {
+      await Promise.allSettled(manifest.files.map(item =>
+        validators.isValidStoragePath(item.path) ? removeFromStorage(item.path) : Promise.resolve()
+      ));
+      await removeFromStorage(session);
+      return res.status(410).json({ error: "Transfer expired." });
+    }
+    const item = manifest.files[fileIndex];
+    if (!item || !validators.isValidStoragePath(item.path) ||
+        !Number.isSafeInteger(item.size) || item.size < 1 || item.size > MAX_UPLOAD_BYTES + 1024 * 1024) {
+      return res.status(400).json({ error: "Invalid transfer file." });
+    }
+    const count = Math.ceil(item.size / TRANSFER_CHUNK_BYTES);
+    if (chunkIndex < 0 || chunkIndex >= count) {
+      return res.status(400).json({ error: "Invalid transfer chunk." });
+    }
+    const start = chunkIndex * TRANSFER_CHUNK_BYTES;
+    const end = Math.min(item.size, start + TRANSFER_CHUNK_BYTES) - 1;
+    const chunk = await downloadStorageRange(item.path, start, end);
+    if (chunk.length !== end - start + 1) throw new Error("Incomplete storage range");
+    const marker = session.replace(/-transfer-manifest$/, `-claim-${fileIndex}-${chunkIndex}`);
+    if (!await claimStorageKey(marker)) {
+      return res.status(410).json({ error: "Transfer chunk already used." });
+    }
+    if (chunkIndex === count - 1) {
+      // Withhold this file's last chunk until R2 confirms object deletion.
+      await removeFromStorage(item.path);
+      if (fileIndex === manifest.files.length - 1) {
+        await removeFromStorage(session).catch(error => console.error("Transfer manifest cleanup failed:", error));
+      }
+    }
+    return res.status(200).set({
+      "Content-Type": "application/octet-stream",
+      "Cache-Control": "no-store",
+    }).end(chunk);
+  } catch (error) {
+    if (error?.name === "NoSuchKey" || error?.$metadata?.httpStatusCode === 404) {
+      return res.status(410).json({ error: "Transfer no longer available." });
+    }
+    console.error("Transfer chunk failed:", error);
+    return res.status(500).json({ error: "Failed to retrieve transfer chunk." });
   }
 });
 
