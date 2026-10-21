@@ -159,26 +159,25 @@
       }
 
       /* Hall of fame cards */
-      .hof-empty {
+      .hof-card {
         border: 1px solid #1a1a1a;
-        padding: 3rem 2rem;
-        text-align: center;
+        padding: 1.75rem 2rem;
       }
-      .hof-empty .trophy {
-        font-size: 2.5rem;
-        margin-bottom: 1rem;
-        opacity: 0.3;
+      .hof-card h3 {
+        color: #fff;
+        font-size: 1.2rem;
+        margin: 0.75rem 0 0.4rem;
       }
-      .hof-empty p {
+      .hof-card p {
         font-size: 0.88rem;
-        color: #444;
+        color: #888;
         line-height: 1.55;
       }
-      .hof-empty a {
+      .hof-card a {
         color: #eb583d;
         text-decoration: none;
       }
-      .hof-empty a:hover {
+      .hof-card a:hover {
         text-decoration: underline;
       }
 
@@ -500,40 +499,40 @@
             security posture with enterprise-grade automated threat detection,
             real-time email alerting, and continuous security monitoring to
             catch vulnerabilities faster. All credits are listed with the
-            researcher's explicit consent anonymous credit is available on
+            researcher's explicit consent; anonymous credit is available on
             request.
           </p>
 
           <!-- Stats -->
           <div class="stats-bar">
             <div class="stat-item">
-              <div class="stat-value">0</div>
+              <div class="stat-value">1</div>
               <div class="stat-label">Researchers credited</div>
             </div>
             <div class="stat-item">
-              <div class="stat-value">0</div>
+              <div class="stat-value">1</div>
               <div class="stat-label">Valid findings</div>
             </div>
             <div class="stat-item">
-              <div class="stat-value">0</div>
+              <div class="stat-value">1</div>
               <div class="stat-label">Critical / High</div>
             </div>
             <div class="stat-item">
-              <div class="stat-value">&lt;48h</div>
+              <div class="stat-value">&mdash;</div>
               <div class="stat-label">Avg. response time</div>
             </div>
           </div>
 
           <!-- Hall of Fame entries -->
           <h2>Credited researchers</h2>
-          <div class="hof-empty">
-            <div class="trophy">&#127942;</div>
+          <div class="hof-card">
+            <span class="sev high">High severity</span>
+            <h3>Nirjhar Barma (<a href="https://github.com/0M4NU4L" target="_blank" rel="noopener noreferrer">0M4NU4L</a>)</h3>
             <p>
-              No entries yet &mdash; be the first to find a valid
-              vulnerability.<br />
-              <a href="mailto:hello@paperfrogs.dev"
-                >Report a vulnerability &rarr;</a
-              >
+              Reported GHSA-ccmm-899j-5495: a one-time link could remove its
+              database record while leaving its encrypted file in R2. Blocking
+              the browser's cleanup request allowed the file to remain
+              downloadable through a captured presigned URL until that URL expired.
             </p>
           </div>
 
@@ -563,6 +562,21 @@
               </tr>
             </thead>
             <tbody>
+              <tr>
+                <td class="finding-id">GHSA-ccmm-899j-5495</td>
+                <td>
+                  <span class="finding-title">Client-side deletion bypass for one-time links</span>
+                  <span class="finding-note">
+                    Reported by Nirjhar Barma (0M4NU4L). The browser could
+                    suppress R2 cleanup after the database burn, leaving the
+                    encrypted object available through a captured presigned URL.
+                    Fixed in code with server-side deletion and regression tests.
+                  </span>
+                </td>
+                <td><span class="sev high">High</span></td>
+                <td><span class="status-badge fixed">Fixed</span></td>
+                <td style="color: #555; font-size: 0.8rem">Oct 2026 (code)</td>
+              </tr>
               <tr>
                 <td class="finding-id">BL-002</td>
                 <td>
@@ -699,9 +713,9 @@
           </p>
 
           <div class="notice">
-            <strong>Be the first.</strong> The first researcher to find and
-            responsibly disclose a valid Critical or High severity vulnerability
-            gets a permanent top-of-page credit. Report to
+            <strong>Found a vulnerability?</strong> Researchers who responsibly
+            disclose a valid Critical or High severity issue receive prominent
+            credit. Report to
             <a
               href="mailto:hello@paperfrogs.dev"
               style="color: #eb583d; text-decoration: none"

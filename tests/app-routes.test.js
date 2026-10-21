@@ -55,11 +55,11 @@ test.after(async () => {
 
 test("core pages render without crashing", async () => {
   const pages = [
-    ["/", "BurnLink — Share files. Encrypted. Ephemeral."],
-    ["/about", "About - BurnLink"],
-    ["/changelog", "Changelog - BurnLink"],
-    ["/roadmap", "Roadmap - BurnLink"],
-    ["/security-policy", "Security Policy - BurnLink"],
+    ["/", "BurnLink — Secure File Sharing with End-to-End Encryption"],
+    ["/about", "How BurnLink Works — End-to-End Encrypted File Sharing"],
+    ["/changelog", "BurnLink Changelog — Version History & Updates"],
+    ["/roadmap", "BurnLink Roadmap — Upcoming Features & Development"],
+    ["/security-policy", "BurnLink Security & Privacy Policy — End-to-End Encryption"],
     ["/hall-of-fame", "Hall of Fame — BurnLink"],
   ];
 
@@ -91,7 +91,7 @@ test("changelog and roadmap expose versioning and planned work", async () => {
   assert.equal(changelog.status, 200);
   assert.match(changelog.body, /v1\.0\.2/);
   assert.match(changelog.body, /Stable Core/);
-  assert.match(changelog.body, /Patch releases/);
+  assert.match(changelog.body, /v1\.1\.1/);
   assert.match(changelog.body, /Visibility &amp; Planning/);
 
   assert.equal(roadmap.status, 200);

@@ -8,6 +8,9 @@ node_bundler = "esbuild"
 external_node_modules = ["ejs"]
 included_files = ["views/**", "public/**", "keys/**"]
 
+[functions."reap-orphaned-files"]
+schedule = "@daily"
+
 
 [dev]
 command = "npm run dev"

@@ -10,7 +10,7 @@ uploads
 # macOS
 .DS_Store
 
-# Editor / agent state
 .puku/lib/issuer-pub.js
 lib/issuer-pub.js
 .puku/
+paper/BurnLink-paper.tex

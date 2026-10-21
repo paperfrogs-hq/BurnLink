@@ -87,7 +87,7 @@ Most file sharing services store your files on their servers—sometimes permane
 - **No tracking** — No analytics or telemetry
 
 ### Technical
-- **Up to 1GB files** — Configurable per deployment
+- **Up to 1GB files** — Configurable on streaming Node deployments (Netlify downloads are limited to 4 MiB)
 - **Multiple access modes** — Password-protected or URL-fragment key
 - **Rate limiting** — Per-endpoint protection
 - **Fast transfers** — Direct browser-to-storage uploads

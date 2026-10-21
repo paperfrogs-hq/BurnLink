@@ -288,6 +288,20 @@ R2_BUCKET_NAME=your-space-name
 
 ### Option 1: Netlify (Easiest)
 
+Netlify's current `serverless-http` adapter buffers download responses. For
+one-time links, this deployment serves encrypted downloads up to 4 MiB; larger
+downloads return HTTP 413 without burning the link. Use the Node server on a
+host that supports streaming responses for larger files. The server proxies the
+encrypted bytes and confirms R2 deletion before completing each file transfer.
+The included daily scheduled function also removes R2 objects older than 24
+hours that no longer have a file record, including web and CLI blobs left by
+earlier versions or interrupted transfers. It saves its scan position in R2, so large
+buckets are covered across successive runs.
+
+On a self-hosted Node deployment, run `node bin/reap-orphaned-files.js` to
+preview orphan cleanup, then schedule `node bin/reap-orphaned-files.js --delete`
+daily. The sweep excludes recent uploads and any object with an active file row.
+
 1. **Push to GitHub**
    ```bash
    git remote add origin https://github.com/your-username/BurnLink.git

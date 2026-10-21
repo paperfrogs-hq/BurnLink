@@ -29,7 +29,7 @@ const {
   securityLog,
 } = require("./lib/security");
 
-const { uploadToStorage, downloadFromStorage, streamFromStorage, removeFromStorage, getPresignedPutUrl, getPresignedGetUrl, getFirstBytes } = require("./lib/r2");
+const { uploadToStorage, downloadFromStorage, streamFromStorage, getStorageSize, removeFromStorage, getPresignedPutUrl, getFirstBytes } = require("./lib/r2");
 
 // Validate environment on startup
 validateEnvironment();
@@ -56,10 +56,7 @@ const r2CspOrigin = process.env.R2_ACCOUNT_ID
   ? `https://*.r2.cloudflarestorage.com`
   : null;
 
-// Secret used to sign one-time R2 cleanup tokens.
-// Falls back to the R2 secret key so no extra env var is required.
-const CLEANUP_SECRET = process.env.CLEANUP_TOKEN_SECRET || process.env.R2_SECRET_ACCESS_KEY || "burnlink-cleanup-v1";
-const GATEWAY_SECRET = process.env.GATEWAY_COOKIE_SECRET || CLEANUP_SECRET;
+const GATEWAY_SECRET = process.env.GATEWAY_COOKIE_SECRET || process.env.R2_SECRET_ACCESS_KEY;
 const GATEWAY_COOKIE = "_bl_gw";
 const GATEWAY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -85,10 +82,6 @@ function isGatewayCookieValid(value) {
   }
   const age = Date.now() - Number(ts);
   return age >= 0 && age < GATEWAY_TTL_MS;
-}
-
-function makeCleanupToken(storagePath) {
-  return crypto.createHmac("sha256", CLEANUP_SECRET).update(storagePath).digest("hex");
 }
 
 function passwordHasWhitespace(password) {
@@ -130,7 +123,7 @@ setInterval(() => {
   if (csrfTokens.size > 100000) {
     console.warn(`[SECURITY] High number of CSRF tokens in memory: ${csrfTokens.size}`);
   }
-}, 10 * 60 * 1000);
+}, 10 * 60 * 1000).unref();
 
 // ── Fix 6: Preview/link-preview bot detection ─────────────────────────────
 // Known bots that auto-fetch shared URLs (link previews). Receiving one of
@@ -196,60 +189,138 @@ function buildStoragePath(originalName) {
   return `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}`;
 }
 
+function waitForDrainOrClose(res) {
+  if (res.destroyed) return Promise.resolve();
+  return new Promise(resolve => {
+    const done = () => {
+      res.off("drain", done);
+      res.off("close", done);
+      resolve();
+    };
+    res.once("drain", done);
+    res.once("close", done);
+  });
+}
+
+function transferMetadata(files, sizes) {
+  return Buffer.from(JSON.stringify({
+    files: files.map((f, i) => ({ fileName: f.originalName, size: sizes[i] })),
+  }));
+}
+
 // uploadToStorage, downloadFromStorage, removeFromStorage are imported from lib/r2.js
 
 async function sendOneTimeEncryptedFile(res, file, bundleFiles = null) {
-
-  // If bundleFiles is provided, burn all files in the bundle
   const filesToBurn = bundleFiles || [file];
-
-  // Fix 1 — Atomic burn via Supabase RPC.
-  // The burn_file() function does the expiry check AND the DELETE in a single
-  // SQL statement, eliminating the TOCTOU window that a separate
-  // SELECT-then-DELETE pattern has. Only one concurrent caller wins;
-  // any race loser (or an already-burned / expired link) gets 410.
-  // Never reveal *why* the link is unavailable — all failure cases return the
-  // same status and body.
-  const burnPromises = filesToBurn.map(f =>
-    supabase.rpc('burn_file', { file_id: f.id })
-  );
-  const burnResults = await Promise.all(burnPromises);
-
-  // Check if any burn succeeded (at least the first one)
-  const mainBurnData = burnResults[0].data;
-  if (burnResults[0].error || !mainBurnData || mainBurnData.length === 0) {
+  const bufferedFunction = process.env.BURNLINK_BUFFERED_FUNCTION === "true" || Boolean(process.env.NETLIFY);
+  if (!filesToBurn.length || !filesToBurn.some(f => f.id === file.id)) {
     return res.status(410).render("not-found");
   }
 
-  // Return presigned GET URLs for all files in the bundle
-  const PRESIGN_TTL = 5 * 60; // 5 minutes
-  const downloadUrls = [];
-
-  try {
-    for (const f of filesToBurn) {
-      const downloadUrl = await getPresignedGetUrl(f.path, PRESIGN_TTL);
-      downloadUrls.push({
-        downloadUrl,
-        fileName: f.originalName,
-        storagePath: f.path,
-        cleanupToken: makeCleanupToken(f.path),
-      });
+  // serverless-http buffers the complete response. Keep its binary payload
+  // below Netlify's function response limit, before consuming the one-time link.
+  if (bufferedFunction) {
+    const sizes = await Promise.all(filesToBurn.map(f => getStorageSize(f.path)));
+    if (sizes.some(size => !Number.isSafeInteger(size) || size < 0) ||
+        4 + transferMetadata(filesToBurn, sizes).length + sizes.reduce((sum, size) => sum + size, 0) > 4 * 1024 * 1024) {
+      return res.status(413).json({ error: "This file requires a streaming server to download securely." });
     }
-  } catch (err) {
-    // Clean up any already-burned files
-    for (const f of filesToBurn) {
-      await removeFromStorage(f.path).catch(() => {});
-    }
-    throw err;
   }
 
-  // Return single file format for backwards compatibility, or array for bundles
-  if (filesToBurn.length === 1) {
-    return res.json(downloadUrls[0]);
-  } else {
-    return res.json({
-      files: downloadUrls,
-      bundleSize: filesToBurn.length,
+  let sources = [];
+  let burnedFiles = [];
+  const deletedPaths = new Set();
+  try {
+    const opened = await Promise.allSettled(filesToBurn.map(f => streamFromStorage(f.path)));
+    sources = opened.filter(result => result.status === "fulfilled").map(result => result.value);
+    if (opened.some(result => result.status === "rejected")) {
+      throw opened.find(result => result.status === "rejected").reason;
+    }
+    res.once("close", () => sources.forEach(source => source.stream.destroy?.()));
+    if (sources.some(source => !Number.isSafeInteger(source.contentLength) || source.contentLength < 0)) {
+      throw new Error("Storage object length unavailable");
+    }
+    const metadata = transferMetadata(filesToBurn, sources.map(source => source.contentLength));
+    if (metadata.length > 1024 * 1024) throw new Error("Bundle metadata too large");
+    const header = Buffer.alloc(4);
+    header.writeUInt32BE(metadata.length);
+    const totalLength = 4 + metadata.length + sources.reduce((sum, source) => sum + source.contentLength, 0);
+    if (bufferedFunction && totalLength > 4 * 1024 * 1024) {
+      return res.status(413).json({ error: "This file requires a streaming server to download securely." });
+    }
+
+    // Open the storage streams before the atomic burn. A missing or unreadable
+    // object must not consume the link, and a sweep cannot race the open after
+    // its database row disappears. Only the RPC winner can send the bytes.
+    const burnResults = await Promise.allSettled(filesToBurn.map(f =>
+      supabase.rpc("burn_file", { file_id: f.id })
+    ));
+    const burned = result => result.status === "fulfilled" &&
+      !result.value.error && result.value.data && result.value.data.length > 0;
+    burnedFiles = filesToBurn.filter((_, i) => burned(burnResults[i]));
+    if (burnResults.some(result => !burned(result))) {
+      return res.status(410).render("not-found");
+    }
+
+    if (bufferedFunction) {
+      const parts = [header, metadata];
+      for (let i = 0; i < sources.length; i++) {
+        const chunks = [];
+        let received = 0;
+        for await (const chunk of sources[i].stream) {
+          chunks.push(chunk);
+          received += chunk.length;
+        }
+        if (received !== sources[i].contentLength) throw new Error("Incomplete storage read");
+        await removeFromStorage(filesToBurn[i].path);
+        deletedPaths.add(filesToBurn[i].path);
+        parts.push(Buffer.concat(chunks));
+      }
+      return res.status(200).set({
+        "Content-Type": "application/octet-stream",
+        "Cache-Control": "no-store",
+      }).end(Buffer.concat(parts));
+    }
+
+    res.status(200).set({
+      "Content-Type": "application/octet-stream",
+      "Cache-Control": "no-store",
+      "Content-Length": String(totalLength),
+    });
+    res.write(header);
+    res.write(metadata);
+    for (let i = 0; i < sources.length; i++) {
+      const source = sources[i];
+      let lastChunk = null;
+      let received = 0;
+      for await (const chunk of source.stream) {
+        if (res.destroyed) throw new Error("Client disconnected");
+        if (!chunk.length) continue;
+        received += chunk.length;
+        if (lastChunk && !res.write(lastChunk)) {
+          await waitForDrainOrClose(res);
+        }
+        lastChunk = chunk;
+      }
+      if (received !== source.contentLength) throw new Error("Incomplete storage read");
+      // Withhold each object's final bytes until R2 confirms deletion. The
+      // recipient never gets a complete encrypted payload while it exists.
+      await removeFromStorage(filesToBurn[i].path);
+      deletedPaths.add(filesToBurn[i].path);
+      if (res.destroyed) throw new Error("Client disconnected");
+      if (lastChunk) res.write(lastChunk);
+    }
+    res.end();
+  } catch (err) {
+    console.error("One-time transfer failed:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to download file." });
+    else res.destroy(err);
+  } finally {
+    for (const source of sources) source.stream.destroy?.();
+    const remaining = burnedFiles.filter(f => !deletedPaths.has(f.path));
+    const cleanup = await Promise.allSettled(remaining.map(f => removeFromStorage(f.path)));
+    cleanup.forEach((result, i) => {
+      if (result.status === "rejected") console.error(`R2 delete failed for ${remaining[i].path}:`, result.reason);
     });
   }
 }
@@ -683,10 +754,10 @@ app.get(
       const row = Array.isArray(burned) ? burned[0] : burned;
 
       const ciphertext = await downloadFromStorage(row.path);
+      if (row.burn_after_read) await removeFromStorage(row.path);
 
-      // If burn-after-read was true, RPC already deleted the row + storage
-      // path. We just need to stream the bytes back. If burn-after-read was
-      // false, we left the row in place for further reads.
+      // The RPC owns the database burn; this handler owns R2 deletion.
+      // Repeatable CLI files retain both their row and storage object.
       // JSON envelope keeps the payload ASCII-safe through Netlify Edge.
       // originalName lets the CLI restore the user-facing filename on
       // download (e.g. "cat.png" instead of "HQfi_vQkWlpI.bin").
@@ -1341,35 +1412,6 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
   }
 });
 
-// Called by the browser after it finishes downloading the encrypted file from R2.
-// Validates the HMAC cleanup token (signed with CLEANUP_SECRET) then deletes
-// the R2 object immediately. This is a fast operation — no size/timeout risk.
-app.post("/api/r2-cleanup", rateLimit(60, 60 * 1000), async (req, res) => {
-  const { storagePath, cleanupToken } = req.body;
-  if (!storagePath || !validators.isValidStoragePath(storagePath) || !cleanupToken) {
-    securityLog.log("INVALID_CLEANUP_REQUEST", {
-      path: req.path,
-      requestId: req.id,
-    });
-    return res.status(400).json({ ok: false, error: "Invalid request." });
-  }
-  const expected = makeCleanupToken(storagePath);
-  // Constant-time comparison; wrap in try-catch in case token isn't valid hex
-  let tokenValid = false;
-  try {
-    tokenValid =
-      cleanupToken.length === expected.length &&
-      crypto.timingSafeEqual(Buffer.from(cleanupToken, "hex"), Buffer.from(expected, "hex"));
-  } catch (_) {
-    tokenValid = false;
-  }
-  if (!tokenValid) {
-    return res.status(403).json({ ok: false, error: "Invalid token." });
-  }
-  await removeFromStorage(storagePath).catch(() => {});
-  return res.json({ ok: true });
-});
-
 // Fix 4: Use DB-backed rate limiter so limits survive serverless cold starts
 app.post("/api/upload", dbRateLimit(10, 10 * 60 * 1000), upload.single("file"), async (req, res) => {
   let storagePath = null;
@@ -1588,6 +1630,24 @@ app.post("/s/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, asy
   }
 });
 
+async function burnStoredFiles(file) {
+  const files = file.bundleId ? await File.findByBundleId(file.bundleId) : [file];
+  const results = await Promise.allSettled(files.map(item =>
+    supabase.rpc("burn_file", { file_id: item.id })
+  ));
+  const burned = files.filter((_, index) => {
+    const result = results[index];
+    return result.status === "fulfilled" && !result.value.error &&
+      result.value.data && result.value.data.length > 0;
+  });
+  // Finish storage cleanup even if another bundle row failed to burn.
+  const deletions = await Promise.allSettled(burned.map(item => removeFromStorage(item.path)));
+  if (results.some(result => result.status === "rejected" || result.value.error) ||
+      deletions.some(result => result.status === "rejected")) {
+    throw new Error("Could not fully burn files");
+  }
+}
+
 app.post("/s/:id/burn", rateLimit(10, 60 * 1000), async (req, res) => {
   const id = req.params.id;
   const referer = req.headers["referer"] || req.headers["origin"] || "";
@@ -1605,8 +1665,7 @@ app.post("/s/:id/burn", rateLimit(10, 60 * 1000), async (req, res) => {
   try {
     const file = await File.findById(id);
     if (!file) return res.json({ ok: true, alreadyGone: true });
-    await File.deleteById(file.id);
-    await removeFromStorage(file.path);
+    await burnStoredFiles(file);
     securityLog.log("FILE_BURNED", {
       fileId: id,
       ip: req.ip,
@@ -1649,7 +1708,8 @@ app.get("/file/:id/raw", rateLimit(15, 60 * 1000), async (req, res) => {
       });
     }
 
-    return sendOneTimeEncryptedFile(res, file);
+    const bundleFiles = file.bundleId ? await File.findByBundleId(file.bundleId) : null;
+    return sendOneTimeEncryptedFile(res, file, bundleFiles);
   } catch (error) {
     return res.status(400).json({ error: "Failed to download file." });
   }
@@ -1680,7 +1740,8 @@ app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, 
     }
 
     if (!file.password) {
-      return sendOneTimeEncryptedFile(res, file);
+      const bundleFiles = file.bundleId ? await File.findByBundleId(file.bundleId) : null;
+      return sendOneTimeEncryptedFile(res, file, bundleFiles);
     }
 
     const activeLockUntilMs = getActiveLock(file);
@@ -1736,7 +1797,8 @@ app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, 
       ip: req.ip,
       requestId: req.id,
     });
-    return sendOneTimeEncryptedFile(res, file);
+    const bundleFiles = file.bundleId ? await File.findByBundleId(file.bundleId) : null;
+    return sendOneTimeEncryptedFile(res, file, bundleFiles);
   } catch (error) {
     return res.status(400).json({
       error: "Failed to verify password.",
@@ -1771,8 +1833,7 @@ app.post("/file/:id/burn", rateLimit(10, 60 * 1000), async (req, res) => {
       console.log(`[burn] File not found id=${id} — already deleted, treating as success`);
       return res.json({ ok: true, alreadyGone: true });
     }
-    await File.deleteById(file.id);
-    await removeFromStorage(file.path);
+    await burnStoredFiles(file);
     securityLog.log("FILE_BURNED", {
       fileId: id,
       ip: req.ip,

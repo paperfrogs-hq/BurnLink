@@ -149,11 +149,12 @@ test("UUID validator rejects invalid formats", async () => {
 });
 
 test("Password validator enforces minimum requirements", async () => {
-  const validPasswords = ["pass1234", "MySecurePass123", "a".repeat(255)];
+  const validPasswords = ["Pass1234", "MySecurePass123", "a".repeat(255)];
 
   const invalidPasswords = [
     "", // empty
     "123", // too short
+    "pass1234", // 8-11 characters without sufficient complexity
     "pass word", // contains space
     "a".repeat(256), // too long
     null,
