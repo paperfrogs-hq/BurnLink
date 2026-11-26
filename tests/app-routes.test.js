@@ -81,7 +81,23 @@ test("public pages share the same header navigation", async () => {
     assert.match(response.body, /href="\/about"/);
     assert.match(response.body, /href="\/changelog"/);
     assert.match(response.body, /href="\/roadmap"/);
+    assert.match(response.body, /class="site-nav-toggle"/);
+    assert.match(response.body, /aria-controls="site-navigation"/);
+    assert.match(response.body, /href="\/responsive\.css"/);
   }
+});
+
+test("responsive navigation assets are served", async () => {
+  const stylesheet = await request("/responsive.css");
+  const script = await request("/site.js");
+
+  assert.equal(stylesheet.status, 200);
+  assert.match(stylesheet.headers["content-type"], /text\/css/);
+  assert.match(stylesheet.body, /site-nav-open/);
+
+  assert.equal(script.status, 200);
+  assert.match(script.headers["content-type"], /javascript/);
+  assert.match(script.body, /aria-expanded/);
 });
 
 test("changelog and roadmap expose versioning and planned work", async () => {

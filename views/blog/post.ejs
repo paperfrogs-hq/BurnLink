@@ -303,13 +303,25 @@
       main { padding: 2rem 0; }
     }
   </style>
+<link rel="stylesheet" href="/responsive.css" />
 </head>
 <body>
   <header>
     <div class="container">
       <div class="header-content">
         <a href="/" class="logo"><img src="/logo1.png" alt="BurnLink" /></a>
-        <nav>
+        <button
+          class="site-nav-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="site-navigation"
+          aria-label="Open navigation menu"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <nav class="site-nav" id="site-navigation" aria-label="Main navigation">
           <a href="/">Home</a>
           <a href="/blog" class="active">Blog</a>
           <a href="/about">About</a>

@@ -153,6 +153,7 @@
       .posts-table { font-size: 0.8rem; }
     }
   </style>
+<link rel="stylesheet" href="/responsive.css" />
 </head>
 <body>
   <div class="admin-container">
@@ -243,7 +244,7 @@
           <h2>Create New Blog Post</h2>
 
           <form id="createPostForm" style="display: grid; gap: 1.5rem;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div class="admin-form-grid" style="display: grid; gap: 1.5rem;">
               <div class="form-group">
                 <label>Title *</label>
                 <input type="text" id="postTitle" name="title" placeholder="Article title" required />
@@ -259,7 +260,7 @@
               <textarea id="postExcerpt" name="excerpt" placeholder="Short summary of the article" required></textarea>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div class="admin-form-grid" style="display: grid; gap: 1.5rem;">
               <div class="form-group">
                 <label>Category *</label>
                 <select id="postCategory" name="category" required>
@@ -277,7 +278,7 @@
               </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div class="admin-form-grid" style="display: grid; gap: 1.5rem;">
               <div class="form-group">
                 <label>Author</label>
                 <input type="text" id="postAuthor" name="author" value="BurnLink Team" />
@@ -307,7 +308,7 @@
               <textarea id="postContent" name="content" placeholder="Write your article here... Supports Markdown!" required></textarea>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div class="admin-form-grid" style="display: grid; gap: 1.5rem;">
               <div class="form-group">
                 <label>Status</label>
                 <select id="postStatus" name="status">
@@ -357,7 +358,7 @@
           </div>
 
           <!-- Charts Section -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+          <div class="admin-form-grid" style="display: grid; gap: 2rem; margin-top: 2rem;">
             <!-- Views Over Time -->
             <div style="background: #111; border: 1px solid #222; padding: 1.5rem; border-radius: 4px;">
               <h3 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 1rem; color: #fff;">Visitor Activity (30 days)</h3>

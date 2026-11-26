@@ -104,6 +104,7 @@ test("CSP header is properly configured", async () => {
 
   assert.match(csp, /default-src 'none'/, "Should have restrictive default");
   assert.match(csp, /script-src 'self'/, "Should limit script sources");
+  assert.match(csp, /style-src 'self'/, "Should allow same-origin stylesheets");
   assert.match(csp, /form-action 'self'/, "Should prevent form hijacking");
   assert.match(csp, /frame-src blob:/, "Should allow frames from blob only");
   assert.match(csp, /object-src 'none'/, "Should block plugins");
