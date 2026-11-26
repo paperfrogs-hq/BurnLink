@@ -32,6 +32,17 @@ pre {
   overflow-x: auto;
 }
 
+.footer-wordmark {
+  margin-top: 1.5rem;
+  color: #331B13;
+  font-size: clamp(2.5rem, 11vw, 7rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 0.9;
+  opacity: 0.3;
+  text-align: center;
+}
+
 .admin-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

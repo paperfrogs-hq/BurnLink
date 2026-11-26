@@ -94,6 +94,7 @@ test("responsive navigation assets are served", async () => {
   assert.equal(stylesheet.status, 200);
   assert.match(stylesheet.headers["content-type"], /text\/css/);
   assert.match(stylesheet.body, /site-nav-open/);
+  assert.match(stylesheet.body, /\.footer-wordmark\s*\{[^}]*color:\s*#331B13;[^}]*opacity:\s*0\.3/s);
 
   assert.equal(script.status, 200);
   assert.match(script.headers["content-type"], /javascript/);
@@ -171,6 +172,7 @@ test("footer product section links to changelog and roadmap", async () => {
 
   assert.equal(response.status, 200);
   assert.match(response.body, /<h3>Product<\/h3>/);
+  assert.match(response.body, /<div class="footer-wordmark" aria-hidden="true">BURNLINK<\/div>/);
   assert.match(response.body, /href="\/changelog"/);
   assert.match(response.body, /href="\/roadmap"/);
   assert.doesNotMatch(response.body, /<a href="\/">Share files<\/a>/);
