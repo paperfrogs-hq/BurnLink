@@ -84,7 +84,6 @@ Most file sharing services store your files on their servers—sometimes permane
 - **One-time tokens** — Each link is valid only once
 - **Brute-force protection** — Failed access attempts trigger 10-minute lockout
 - **CSRF protection** — Protection against cross-site attacks
-- **No tracking** — No analytics or telemetry
 
 ### Technical
 - **Up to 1GB files** — Large Netlify downloads use server-controlled, single-use chunks
@@ -131,6 +130,7 @@ Most file sharing services store your files on their servers—sometimes permane
 - **Key derivation:** 
   - Password mode: PBKDF2 with 210,000 iterations and random salt
   - Link-key mode: Generated client-side and embedded in URL fragment
+- **Link-key privacy:** Link keys stay in the browser and URL fragment; they are never sent to or stored by the server. Decryption pages keep the key in first-party closure state and do not load third-party scripts. The upload page still loads Cloudflare Turnstile, which must be treated as trusted code.
 - **Random IV:** Generated for each encryption operation
 - **Authenticated:** GCM provides integrity verification
 

@@ -3,6 +3,7 @@ const supabase = require("../lib/supabase");
 const { validators } = require("../lib/security");
 
 const filesTable = process.env.SUPABASE_FILES_TABLE || "files";
+const fileColumns = "id, path, original_name, password, failed_attempts, locked_until, mode, expires_at, bundle_id";
 const PASSWORD_MIN_LENGTH = 4;
 
 function mapRow(row) {
@@ -16,7 +17,6 @@ function mapRow(row) {
     lockedUntil: row.locked_until || null,
     mode: row.mode || "download",
     expiresAt: row.expires_at || null,
-    linkKey: row.link_key || null,
     bundleId: row.bundle_id || null,
   };
 }
@@ -26,7 +26,6 @@ async function createFile({
   originalName, 
   password, 
   mode = "download", 
-  linkKey = null,
   bundleId = null,
 }) {
   // Validate inputs
@@ -62,10 +61,6 @@ async function createFile({
     throw new Error("Invalid mode: must be 'download' or 'view-once'");
   }
 
-  if (linkKey && !validators.isValidLinkKey(linkKey)) {
-    throw new Error("Invalid link key");
-  }
-
   const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 
   const { data, error } = await supabase
@@ -78,10 +73,9 @@ async function createFile({
       locked_until: null,
       mode,
       expires_at: null,
-      link_key: linkKey || null,
       bundle_id: bundleId || null,
     })
-    .select("*")
+    .select(fileColumns)
     .single();
 
   if (error) {
@@ -94,7 +88,7 @@ async function createFile({
 async function findFileById(id) {
   const { data, error } = await supabase
     .from(filesTable)
-    .select("*")
+    .select(fileColumns)
     .eq("id", id)
     .maybeSingle();
 
@@ -108,7 +102,7 @@ async function findFileById(id) {
 async function findFilesByBundleId(bundleId) {
   const { data, error } = await supabase
     .from(filesTable)
-    .select("*")
+    .select(fileColumns)
     .eq("bundle_id", bundleId)
     .order("created_at", { ascending: true });
 

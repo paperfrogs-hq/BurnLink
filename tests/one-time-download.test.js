@@ -150,6 +150,7 @@ async function readChunkedInBrowser(startResponse) {
   assert.ok(start >= 0 && end > start);
   const context = {
     Number, JSON, Uint8Array,
+    analyticsHeaders: () => ({}),
     fetch: async (_url, options) => {
       const result = await netlifyHandler({
         httpMethod: "POST", path: "/api/transfer/chunk",
@@ -189,6 +190,26 @@ test("one-time read deletes R2 on the server and exposes no reusable URL", async
   const second = await request(`/s/${id}/raw`);
   assert.equal(second.status, 404);
   assert.equal((await request("/api/r2-cleanup", "POST")).status, 404);
+});
+
+test("share page never exposes a stored link key", async () => {
+  const id = "13f5f075-25e5-4c72-9826-dc4f64404d0b";
+  const path = `2026-10-22/${id}-secret.txt`;
+  const linkKey = "A".repeat(43);
+  rows.set(id, { id, path, originalName: "secret.txt", linkKey });
+
+  const response = await request(`/s/${id}`);
+
+  assert.equal(response.status, 200);
+  assert.doesNotMatch(response.body.toString(), new RegExp(linkKey));
+  assert.doesNotMatch(response.body.toString(), /data-lk=/);
+  assert.doesNotMatch(response.body.toString(), /window\.__BL_KEY__/);
+  assert.match(response.body.toString(), /var keyString = location\.hash\.slice\(1\);/);
+  assert.doesNotMatch(response.body.toString(), /<script\b[^>]*\bsrc=["']https?:/i);
+  assert.ok(
+    response.body.toString().indexOf("var keyString = location.hash.slice(1);") <
+      response.body.toString().indexOf('src="/winter.js"')
+  );
 });
 
 test("concurrent readers cannot both receive a one-time payload", async () => {

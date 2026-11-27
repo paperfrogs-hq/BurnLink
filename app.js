@@ -11,6 +11,7 @@ const File = require("./models/File");
 const { dbRateLimit } = require("./models/RateLimit");
 const Waitlist = require("./models/Waitlist");
 const supabase = require("./lib/supabase");
+const { createAnalytics, isValidVisitorId } = require("./lib/analytics");
 const { getComparisonBySlug, getComparisonPages } = require("./lib/comparisons");
 const {
   versioningPolicy,
@@ -30,6 +31,23 @@ const {
 } = require("./lib/security");
 
 const { uploadToStorage, downloadFromStorage, downloadStorageRange, claimStorageKey, streamFromStorage, getStorageSize, removeFromStorage, getPresignedPutUrl, getFirstBytes } = require("./lib/r2");
+const analytics = createAnalytics(supabase);
+
+function getAnalyticsVisitorId(req) {
+  const visitorId = req.get("X-BurnLink-Analytics-ID");
+  return isValidVisitorId(visitorId) ? visitorId.toLowerCase() : null;
+}
+
+async function recordAnalyticsEvent(req, eventType, quantity = 1) {
+  const visitorId = getAnalyticsVisitorId(req);
+  if (!visitorId) return;
+
+  try {
+    await analytics.recordEvent(visitorId, eventType, quantity);
+  } catch (error) {
+    console.error(`[analytics] ${eventType} recording failed:`, error.message);
+  }
+}
 
 // Validate environment on startup
 validateEnvironment();
@@ -252,7 +270,7 @@ async function startChunkedTransfer(res, files, sizes) {
 
 // uploadToStorage, downloadFromStorage, removeFromStorage are imported from lib/r2.js
 
-async function sendOneTimeEncryptedFile(res, file, bundleFiles = null) {
+async function sendOneTimeEncryptedFile(req, res, file, bundleFiles = null) {
   const filesToBurn = bundleFiles || [file];
   const bufferedFunction = process.env.BURNLINK_BUFFERED_FUNCTION === "true" || Boolean(process.env.NETLIFY);
   if (!filesToBurn.length || !filesToBurn.some(f => f.id === file.id)) {
@@ -324,6 +342,7 @@ async function sendOneTimeEncryptedFile(res, file, bundleFiles = null) {
         deletedPaths.add(filesToBurn[i].path);
         parts.push(Buffer.concat(chunks));
       }
+      await recordAnalyticsEvent(req, "successful_download", filesToBurn.length);
       return res.status(200).set({
         "Content-Type": "application/octet-stream",
         "Cache-Control": "no-store",
@@ -358,6 +377,7 @@ async function sendOneTimeEncryptedFile(res, file, bundleFiles = null) {
       if (res.destroyed) throw new Error("Client disconnected");
       if (lastChunk) res.write(lastChunk);
     }
+    await recordAnalyticsEvent(req, "successful_download", filesToBurn.length);
     res.end();
   } catch (err) {
     console.error("One-time transfer failed:", err);
@@ -1035,6 +1055,36 @@ app.get("/api/csrf-token", (req, res) => {
   res.json({ token });
 });
 
+app.post("/api/analytics/visit", rateLimit(30, 60 * 1000), async (req, res) => {
+  const visitorId = getAnalyticsVisitorId(req);
+  if (!visitorId) {
+    return res.status(400).json({ error: "A valid analytics identifier is required." });
+  }
+
+  try {
+    await analytics.recordVisit(visitorId);
+    return res.status(204).end();
+  } catch (error) {
+    console.error("[analytics] Visit recording failed:", error.message);
+    return res.status(503).json({ error: "Analytics is temporarily unavailable." });
+  }
+});
+
+app.delete("/api/analytics/consent", rateLimit(10, 60 * 1000), async (req, res) => {
+  const visitorId = getAnalyticsVisitorId(req);
+  if (!visitorId) {
+    return res.status(400).json({ error: "A valid analytics identifier is required." });
+  }
+
+  try {
+    await analytics.forgetVisitor(visitorId);
+    return res.status(204).end();
+  } catch (error) {
+    console.error("[analytics] Consent withdrawal cleanup failed:", error.message);
+    return res.status(503).json({ error: "Analytics data could not be removed." });
+  }
+});
+
 app.get("/", (req, res) => {
   const error = req.query.error || null;
   res.render("index", { fileLink: null, error });
@@ -1329,7 +1379,6 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
     originalName: req.body.originalName,
     mode: req.body.mode,
     password: req.body.password,
-    linkKey: req.body.linkKey,
   }];
 
   if (!Array.isArray(filesToProcess) || filesToProcess.length === 0) {
@@ -1343,7 +1392,7 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
   // Early validation for all files (synchronous, fast)
   for (let i = 0; i < filesToProcess.length; i++) {
     const file = filesToProcess[i];
-    const { storagePath, originalName, mode: rawMode, password: rawPassword, linkKey: rawLinkKey } = file;
+    const { storagePath, originalName, mode: rawMode, password: rawPassword } = file;
 
     if (!storagePath || !validators.isValidStoragePath(storagePath)) {
       securityLog.log("INVALID_STORAGE_PATH", {
@@ -1352,15 +1401,6 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
         fileIndex: i,
       });
       return res.status(400).json({ error: `Invalid storage path at file ${i + 1}.` });
-    }
-
-    if (rawLinkKey && !validators.isValidLinkKey(rawLinkKey)) {
-      securityLog.log("INVALID_LINK_KEY", {
-        path: req.path,
-        requestId: req.id,
-        fileIndex: i,
-      });
-      return res.status(400).json({ error: `Invalid link key at file ${i + 1}.` });
     }
 
     if (rawPassword && !isValidPassword(rawPassword)) {
@@ -1388,7 +1428,7 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
 
     // Process all files in parallel
     const fileCreationPromises = filesToProcess.map(async (file, idx) => {
-      const { storagePath, originalName, mode: rawMode, password: rawPassword, linkKey: rawLinkKey } = file;
+      const { storagePath, originalName, mode: rawMode, password: rawPassword } = file;
       
       const originalNameClean = (originalName || "file").toString().trim().slice(0, 255);
       const mode = (rawMode === "view-once" || rawMode === "download") ? rawMode : "download";
@@ -1402,7 +1442,6 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
             originalName: originalNameClean,
             password: rawPassword || undefined,
             mode,
-            linkKey: rawLinkKey || null,
             bundleId: bundleId,
           }),
         ]);
@@ -1425,7 +1464,6 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
           ip: req.ip,
           mode,
           hasPassword: Boolean(rawPassword),
-          hasLinkKey: Boolean(rawLinkKey),
           requestId: req.id,
           fileIndex: idx,
           batchMode: isBatchMode,
@@ -1440,6 +1478,7 @@ app.post("/api/commit", dbRateLimit(30, 10 * 60 * 1000), async (req, res) => {
     });
 
     const fileIds = await Promise.all(fileCreationPromises);
+    await recordAnalyticsEvent(req, "completed_upload", fileIds.length);
 
     const shareBaseUrl = getShareBaseUrl(req);
     
@@ -1543,6 +1582,7 @@ app.post("/api/upload", dbRateLimit(10, 10 * 60 * 1000), upload.single("file"), 
       requestId: req.id,
     });
 
+    await recordAnalyticsEvent(req, "completed_upload");
     const shareBaseUrl = getShareBaseUrl(req);
 
     return res.status(201).json({
@@ -1586,7 +1626,6 @@ app.get("/s/:id", async (req, res) => {
       bundleFiles: bundleFiles,
       requiresPassword: Boolean(file.password),
       mode: file.mode || "download",
-      linkKey: file.linkKey || null,
     });
   } catch (error) {
     return res.status(400).render("not-found");
@@ -1632,6 +1671,7 @@ app.post("/api/transfer/chunk", rateLimit(600, 60 * 1000), async (req, res) => {
     if (chunkIndex === count - 1) {
       // Withhold this file's last chunk until R2 confirms object deletion.
       await removeFromStorage(item.path);
+      await recordAnalyticsEvent(req, "successful_download");
       if (fileIndex === manifest.files.length - 1) {
         await removeFromStorage(session).catch(error => console.error("Transfer manifest cleanup failed:", error));
       }
@@ -1664,7 +1704,7 @@ app.get("/s/:id/raw", rateLimit(15, 60 * 1000), async (req, res) => {
     if (file.bundleId) {
       bundleFiles = await File.findByBundleId(file.bundleId);
     }
-    return sendOneTimeEncryptedFile(res, file, bundleFiles);
+    return sendOneTimeEncryptedFile(req, res, file, bundleFiles);
   } catch (error) {
     return res.status(400).json({ error: "Failed to download file." });
   }
@@ -1680,7 +1720,7 @@ app.post("/s/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, asy
       if (file.bundleId) {
         bundleFiles = await File.findByBundleId(file.bundleId);
       }
-      return sendOneTimeEncryptedFile(res, file, bundleFiles);
+      return sendOneTimeEncryptedFile(req, res, file, bundleFiles);
     }
     const activeLockUntilMs = getActiveLock(file);
     if (activeLockUntilMs) {
@@ -1728,7 +1768,7 @@ app.post("/s/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, asy
     if (file.bundleId) {
       bundleFiles = await File.findByBundleId(file.bundleId);
     }
-    return sendOneTimeEncryptedFile(res, file, bundleFiles);
+    return sendOneTimeEncryptedFile(req, res, file, bundleFiles);
   } catch (error) {
     return res.status(400).json({ error: "Failed to verify password." });
   }
@@ -1813,7 +1853,7 @@ app.get("/file/:id/raw", rateLimit(15, 60 * 1000), async (req, res) => {
     }
 
     const bundleFiles = file.bundleId ? await File.findByBundleId(file.bundleId) : null;
-    return sendOneTimeEncryptedFile(res, file, bundleFiles);
+    return sendOneTimeEncryptedFile(req, res, file, bundleFiles);
   } catch (error) {
     return res.status(400).json({ error: "Failed to download file." });
   }
@@ -1845,7 +1885,7 @@ app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, 
 
     if (!file.password) {
       const bundleFiles = file.bundleId ? await File.findByBundleId(file.bundleId) : null;
-      return sendOneTimeEncryptedFile(res, file, bundleFiles);
+      return sendOneTimeEncryptedFile(req, res, file, bundleFiles);
     }
 
     const activeLockUntilMs = getActiveLock(file);
@@ -1902,7 +1942,7 @@ app.post("/file/:id/raw", dbRateLimit(20, 60 * 1000), csrfProtectionMiddleware, 
       requestId: req.id,
     });
     const bundleFiles = file.bundleId ? await File.findByBundleId(file.bundleId) : null;
-    return sendOneTimeEncryptedFile(res, file, bundleFiles);
+    return sendOneTimeEncryptedFile(req, res, file, bundleFiles);
   } catch (error) {
     return res.status(400).json({
       error: "Failed to verify password.",

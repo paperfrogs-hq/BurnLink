@@ -7,13 +7,15 @@ const app = require("../app");
 let server;
 let port;
 
-async function request(path) {
+async function request(path, options = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.get(
+    const req = http.request(
       {
         hostname: "127.0.0.1",
         port,
         path,
+        method: options.method || "GET",
+        headers: options.headers || {},
       },
       (res) => {
         let body = "";
@@ -31,6 +33,8 @@ async function request(path) {
       }
     );
     req.on("error", reject);
+    if (options.body) req.write(options.body);
+    req.end();
   });
 }
 
@@ -99,6 +103,46 @@ test("responsive navigation assets are served", async () => {
   assert.equal(script.status, 200);
   assert.match(script.headers["content-type"], /javascript/);
   assert.match(script.body, /aria-expanded/);
+});
+
+test("public pages use first-party analytics without third-party trackers", async () => {
+  const response = await request("/");
+  const uploadScript = await request("/upload.js");
+  const analyticsScript = await request("/analytics.js");
+
+  assert.equal(response.status, 200);
+  assert.doesNotMatch(response.body, /static\.cloudflareinsights\.com|cloud\.umami\.is/);
+  assert.doesNotMatch(response.body, /SpeedInsights/);
+  assert.match(response.body, /challenges\.cloudflare\.com\/turnstile\/v0\/api\.js/);
+  assert.match(response.body, /analytics-preferences/);
+  assert.equal(uploadScript.status, 200);
+  assert.doesNotMatch(uploadScript.body, /sessionStorage|__fse_link_key_/);
+  assert.match(uploadScript.body, /var linkUrl = shareLinkEl\.href;/);
+  assert.equal(analyticsScript.status, 200);
+  assert.match(analyticsScript.body, /No action is needed/);
+  assert.match(analyticsScript.body, /Turn off analytics/);
+  assert.doesNotMatch(analyticsScript.body, /Accept analytics|Reject/);
+
+  for (const path of [
+    "/about",
+    "/security-policy",
+    "/changelog",
+    "/roadmap",
+    "/hall-of-fame",
+    "/comparisons/wetransfer",
+  ]) {
+    const page = await request(path);
+    assert.equal(page.status, 200, `${path} should return 200`);
+    assert.doesNotMatch(page.body, /static\.cloudflareinsights\.com|cloud\.umami\.is/);
+  }
+});
+
+test("analytics write endpoints require a valid browser identifier", async () => {
+  const visit = await request("/api/analytics/visit", { method: "POST" });
+  const revoke = await request("/api/analytics/consent", { method: "DELETE" });
+
+  assert.equal(visit.status, 400);
+  assert.equal(revoke.status, 400);
 });
 
 test("changelog and roadmap expose versioning and planned work", async () => {

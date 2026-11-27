@@ -507,20 +507,6 @@
         }
       }
     </style>
-    <!-- Cloudflare Web Analytics -->
-    <script
-      defer
-      src="https://static.cloudflareinsights.com/beacon.min.js"
-      data-cf-beacon='{"token": "733fae826e624a4badabf309aea4d629"}'
-    ></script>
-    <!-- End Cloudflare Web Analytics -->
-    <!-- Umami Analytics -->
-    <script
-      defer
-      src="https://cloud.umami.is/script.js"
-      data-website-id="e4df83ef-9f58-4f9b-9d4b-cee378637ed7"
-    ></script>
-    <!-- End Umami Analytics -->
   <link rel="stylesheet" href="/responsive.css" />
   </head>
   <body>
@@ -763,9 +749,11 @@
             <div class="principle-num">03</div>
             <strong>Minimal footprint</strong>
             <p>
-              We store exactly what we need: the encrypted payload and a salted
-              hash of your server auth token (not your password). No analytics
-              on file content, no IP logging tied to files.
+              We store only what is needed to operate sharing. First-party
+              analytics estimates unique browsers and counts completed
+              uploads/downloads. Browser IDs are hashed before storage; file
+              names, contents, and IP addresses are not stored in analytics.
+              You can turn analytics off in Privacy choices.
             </p>
           </div>
           <div class="principle">

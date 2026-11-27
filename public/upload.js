@@ -51,6 +51,13 @@
     statusEl.classList.add("error");
   }
 
+  function analyticsHeaders() {
+    if (window.BurnLinkAnalytics && typeof window.BurnLinkAnalytics.headers === "function") {
+      return window.BurnLinkAnalytics.headers();
+    }
+    return {};
+  }
+
   function hasWhitespace(value) {
     return /\s/.test(value || "");
   }
@@ -249,14 +256,13 @@
     }
   }
 
-  function showLinkBox(fileId, baseUrl, hasPassword) {
+  function showLinkBox(fileId, baseUrl, hasPassword, linkKey) {
     var displayUrl = baseUrl + "/s/" + fileId;
     var shareUrl;
 
     if (hasPassword) {
       shareUrl = displayUrl;
     } else {
-      var linkKey = sessionStorage.getItem("__fse_link_key_" + fileId);
       shareUrl = linkKey ? displayUrl + "#" + linkKey : displayUrl;
     }
 
@@ -542,7 +548,6 @@
         };
         
         if (serverToken) payload.password = serverToken;
-        if (result.item.linkKey) payload.linkKey = toBase64Url(result.item.linkKey);
         
         return payload;
       });
@@ -558,7 +563,7 @@
 
       var commitRes = await fetch("/api/commit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: Object.assign({ "Content-Type": "application/json" }, analyticsHeaders()),
         body: JSON.stringify(batchCommitPayload),
       });
 
@@ -573,17 +578,20 @@
 
       var commitData = await commitRes.json();
       
-      // Store link keys in session storage
-      if (commitData.ids && commitData.ids.length > 0) {
-        for (var fIdx = 0; fIdx < uploadResults.length; fIdx++) {
-          if (uploadResults[fIdx].item.linkKey) {
-            sessionStorage.setItem("__fse_link_key_" + commitData.ids[fIdx], toBase64Url(uploadResults[fIdx].item.linkKey));
-          }
-        }
-      }
-
       // Use first file ID as primary share link
-      showLinkBox(commitData.ids[0], commitData.baseUrl, hasPassword);
+      var primaryLinkKey = uploadResults[0].item.linkKey;
+      showLinkBox(
+        commitData.ids[0],
+        commitData.baseUrl,
+        hasPassword,
+        primaryLinkKey ? toBase64Url(primaryLinkKey) : null
+      );
+      uploadResults.forEach(function(result) {
+        if (result.item.linkKey) {
+          result.item.linkKey.fill(0);
+          result.item.linkKey = null;
+        }
+      });
       setStatus("All files successfully uploaded!");
       showToast(fileList.length + " file(s) uploaded! Your secure link is ready to share.", "success");
       resetTurnstile();
@@ -607,7 +615,7 @@
 
   async function handleCopyLink(event) {
     event.preventDefault();
-    var linkUrl = shareLinkEl.textContent;
+    var linkUrl = shareLinkEl.href;
 
     try {
       await navigator.clipboard.writeText(linkUrl);

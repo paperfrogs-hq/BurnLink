@@ -11,10 +11,13 @@ require('dotenv').config();
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const FILES_TABLE = process.env.SUPABASE_FILES_TABLE || "files";
 
-if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-  console.error('ERROR: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env');
-  process.exit(1);
+function quoteSqlIdentifier(identifier) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
+    throw new Error("SUPABASE_FILES_TABLE must be a simple SQL identifier.");
+  }
+  return `"${identifier}"`;
 }
 
 async function executeSQL(sql) {
@@ -51,6 +54,10 @@ async function executeSQL(sql) {
 }
 
 async function executeSQLDirect() {
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env");
+  }
+
   // Alternative: Use direct PostgreSQL wire protocol via Supabase's API
   const { createClient } = require('@supabase/supabase-js');
   
@@ -66,8 +73,7 @@ async function executeSQLDirect() {
     .sort();
 
   if (migrationFiles.length === 0) {
-    console.error('No .sql files found in migrations/');
-    process.exit(1);
+    throw new Error('No .sql files found in migrations/');
   }
 
   console.log(
@@ -81,8 +87,11 @@ async function executeSQLDirect() {
   console.log('\nMigrations complete!');
 }
 
-async function runMigrationFile(supabase, filePath) {
-  const sql = fs.readFileSync(filePath, 'utf8');
+async function runMigrationFile(supabase, filePath, filesTable = FILES_TABLE) {
+  const sql = fs.readFileSync(filePath, 'utf8').replace(
+    /\{\{FILES_TABLE\}\}/g,
+    () => quoteSqlIdentifier(filesTable)
+  );
 
   // Split SQL into individual statements (basic splitting)
   const statements = sql
@@ -97,26 +106,25 @@ async function runMigrationFile(supabase, filePath) {
     const stmt = statements[i] + ';';
     console.log(`\n[${i + 1}/${statements.length}] Executing: ${stmt.substring(0, 50)}...`);
     
-    try {
-      const { data, error } = await supabase.rpc('exec_sql', {
-        query: stmt,
-      });
-      
-      if (error) {
-        console.error(`ERROR: ${error.message}`);
-        // Continue on error in case table already exists
-      } else {
-        console.log(`✅ Success`);
-      }
-    } catch (err) {
-      console.error(`ERROR: ${err.message}`);
-      // Continue on error
+    const { error } = await supabase.rpc('exec_sql', {
+      query: stmt,
+    });
+
+    if (error) {
+      throw new Error(
+        `${path.basename(filePath)} statement ${i + 1} failed: ${error.message}`
+      );
     }
+
+    console.log(`✅ Success`);
   }
 }
 
-// Run the migration
-executeSQLDirect().catch(err => {
-  console.error('Migration failed:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  executeSQLDirect().catch(err => {
+    console.error('Migration failed:', err);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { quoteSqlIdentifier, runMigrationFile };
