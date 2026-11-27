@@ -205,3 +205,7 @@ For questions or issues:
 ## License
 
 BurnLink is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
+
+## CodeScene Integration Test
+
+Testing automated CodeScene pull request analysis.
