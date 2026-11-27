@@ -2,7 +2,6 @@
   "use strict";
 
   var PREFERENCE_KEY = "burnlink.analytics.consent";
-  var NOTICE_KEY = "burnlink.analytics.notice-dismissed";
   var VISITOR_ID_KEY = "burnlink.analytics.id";
   var VISITOR_ID_RE = /^[a-f0-9]{64}$/i;
   var disabledInMemory = false;
@@ -59,14 +58,6 @@
     });
   }
 
-  function storeNoticeDismissed() {
-    try {
-      localStorage.setItem(NOTICE_KEY, "true");
-    } catch (error) {
-      console.error("[analytics] Could not save notice preference:", error);
-    }
-  }
-
   function startAnalytics(enableExplicitly, status) {
     disabledInMemory = false;
     try {
@@ -101,7 +92,6 @@
       dismiss.type = "button";
       dismiss.textContent = "Got it";
       dismiss.addEventListener("click", function () {
-        storeNoticeDismissed();
         banner.hidden = true;
       });
 
@@ -112,14 +102,12 @@
         var status = banner.querySelector(".burnlink-analytics-status");
         if (isDisabled()) {
           if (startAnalytics(true, status)) {
-            storeNoticeDismissed();
             banner.hidden = true;
           }
           return;
         }
         forgetAndDisable(status).then(function (removed) {
           if (removed) {
-            storeNoticeDismissed();
             banner.hidden = true;
           }
         });
@@ -190,14 +178,6 @@
   if (!isDisabled()) {
     startAnalytics(false);
   }
-
-  var noticeDismissed = false;
-  try {
-    noticeDismissed = localStorage.getItem(NOTICE_KEY) === "true";
-  } catch (error) {
-    console.error("[analytics] Could not read notice preference:", error);
-  }
-  if (!noticeDismissed) showBanner();
 
   var preferencesButton = document.getElementById("analytics-preferences");
   if (preferencesButton) {

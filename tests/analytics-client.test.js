@@ -101,10 +101,13 @@ test("analytics starts automatically and can be turned off from privacy choices"
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, "/api/analytics/visit");
 
-  const banner = elements.get("burnlink-analytics-consent");
+  assert.equal(elements.has("burnlink-analytics-consent"), false);
   const visitorId = storage.get("burnlink.analytics.id");
   assert.match(visitorId, /^[a-f0-9]{64}$/);
   assert.equal(storage.get("burnlink.analytics.consent"), undefined);
+
+  preferencesButton.click();
+  const banner = elements.get("burnlink-analytics-consent");
   assert.match(banner.querySelector("p").textContent, /No action is needed/);
   const [, actions] = banner.children;
   const [dismiss, toggle] = actions.children;
@@ -118,7 +121,7 @@ test("analytics starts automatically and can be turned off from privacy choices"
 
   dismiss.click();
   assert.equal(banner.hidden, true);
-  assert.equal(storage.get("burnlink.analytics.notice-dismissed"), "true");
+  assert.equal(storage.has("burnlink.analytics.notice-dismissed"), false);
   assert.equal(requests.length, 1);
 
   preferencesButton.click();
@@ -136,7 +139,6 @@ test("previously opted-out browsers stay off until enabled in privacy choices", 
   const elements = new Map();
   const storage = new Map([
     ["burnlink.analytics.consent", "rejected"],
-    ["burnlink.analytics.notice-dismissed", "true"],
   ]);
   const requests = [];
   const preferencesButton = createElement(elements, "analytics-preferences");
@@ -188,6 +190,7 @@ test("previously opted-out browsers stay off until enabled in privacy choices", 
   assert.equal(requests.length, 0);
   assert.equal(context.window.BurnLinkAnalytics.headers()["X-BurnLink-Analytics-ID"], undefined);
 
+  assert.equal(elements.has("burnlink-analytics-consent"), false);
   preferencesButton.click();
   const banner = elements.get("burnlink-analytics-consent");
   assert.match(banner.querySelector("p").textContent, /currently off/);
